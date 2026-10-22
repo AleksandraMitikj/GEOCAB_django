@@ -1,0 +1,73 @@
+/* GEOCAB - бои и анимации за јавните страници */
+:root {
+    --gc-yellow: #ffc107;
+    --gc-yellow-dark: #f0a800;
+    --gc-navy: #1b1f3b;
+    --gc-navy-2: #2b3170;
+    --gc-green: #198754;
+}
+
+.gc-hero {
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+    background: radial-gradient(circle at 85% 15%, rgba(255, 193, 7, .35), transparent 40%),
+                linear-gradient(135deg, var(--gc-navy) 0%, var(--gc-navy-2) 60%, #3d2e7c 100%);
+}
+.gc-hero .gc-city { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 200px; object-fit: cover; object-position: bottom; }
+.gc-hero-content { position: relative; z-index: 2; padding-top: 5rem; padding-bottom: 13rem; }
+.gc-highlight { color: var(--gc-yellow); }
+
+/* такси што вози по патот */
+.gc-taxi { position: absolute; bottom: 12px; width: 190px; z-index: 3; animation: gc-drive 14s linear infinite; }
+@keyframes gc-drive { from { left: -220px; } to { left: 100%; } }
+.gc-taxi-bounce { animation: gc-bounce .5s ease-in-out infinite alternate; display: block; }
+@keyframes gc-bounce { to { transform: translateY(-3px); } }
+
+.btn-gc { background: var(--gc-yellow); border-color: var(--gc-yellow); color: var(--gc-navy); font-weight: 600; }
+.btn-gc:hover { background: var(--gc-yellow-dark); border-color: var(--gc-yellow-dark); color: var(--gc-navy); }
+
+.gc-section { padding: 4.5rem 0; }
+.gc-section-yellow { background: #fff8e1; }
+.gc-section-navy { background: var(--gc-navy); color: #fff; }
+.gc-eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; font-weight: 700; color: var(--gc-yellow-dark); }
+
+/* картички што се креваат */
+.gc-lift { transition: transform .2s ease, box-shadow .2s ease; border: 0; border-radius: 1rem; }
+.gc-lift:hover { transform: translateY(-6px); box-shadow: 0 1rem 2rem rgba(27, 31, 59, .15) !important; }
+.gc-icon { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 1.6rem; }
+
+.gc-step { position: relative; padding-left: 4rem; }
+.gc-step-num { position: absolute; left: 0; top: 0; width: 3rem; height: 3rem; border-radius: 50%; display: grid; place-items: center;
+               background: var(--gc-yellow); color: var(--gc-navy); font-weight: 800; font-size: 1.25rem; }
+
+.gc-stat { font-size: 2.6rem; font-weight: 800; color: var(--gc-yellow); line-height: 1; }
+
+/* калкулатор */
+.gc-calc { border-radius: 1.25rem; }
+.gc-calc .form-range::-webkit-slider-thumb { background: var(--gc-yellow-dark); }
+.gc-calc .form-range::-moz-range-thumb { background: var(--gc-yellow-dark); }
+.gc-price { font-size: 1.8rem; font-weight: 800; color: var(--gc-navy); transition: transform .15s; }
+.gc-price.bump { transform: scale(1.08); }
+
+.gc-float { animation: gc-float 4s ease-in-out infinite; }
+@keyframes gc-float { 50% { transform: translateY(-12px); } }
+.pin { animation: gc-float 3s ease-in-out infinite; }
+.pin-b { animation-delay: 1.2s; }
+.route { animation: gc-dash 1.5s linear infinite; }
+@keyframes gc-dash { to { stroke-dashoffset: -44; } }
+
+.gc-reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
+.gc-reveal.visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .gc-taxi, .gc-taxi-bounce, .gc-float, .pin, .route { animation: none; }
+    .gc-taxi { left: 60%; }
+    .gc-reveal { opacity: 1; transform: none; transition: none; }
+}
+@media (max-width: 576px) {
+    .gc-hero-content { padding-top: 3rem; padding-bottom: 10rem; }
+    .gc-role-switch .btn { font-size: .85rem; padding-left: .4rem; padding-right: .4rem; }
+    .gc-taxi { width: 140px; }
+    .gc-hero .gc-city { height: 150px; }
+}

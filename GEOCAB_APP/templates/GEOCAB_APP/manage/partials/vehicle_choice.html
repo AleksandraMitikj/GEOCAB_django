@@ -1,0 +1,39 @@
+<div class="btn-group w-100 mb-3" role="group">
+    {% for choice in vehicle_choice.vehicle_mode %}
+        <input type="radio" class="btn-check" name="{{ choice.data.name }}" id="{{ choice.id_for_label }}"
+               value="{{ choice.data.value }}" {% if choice.data.selected %}checked{% endif %}>
+        <label class="btn btn-outline-dark btn-sm" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+    {% endfor %}
+</div>
+<div data-mode="new">
+    <div class="row g-2">
+        <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.plate %}</div>
+        <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.traffic_permit %}</div>
+        <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.vehicle_type %}</div>
+        <div class="col-md-3">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.color %}</div>
+        <div class="col-md-3">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.year %}</div>
+    </div>
+</div>
+<div data-mode="existing">
+    {% if vehicle_choice.fields.existing_vehicle.queryset.exists %}
+        {% include 'GEOCAB_APP/partials/field.html' with field=vehicle_choice.existing_vehicle %}
+    {% else %}
+        <p class="text-secondary small">Нема слободни (недоделени) возила. Изберете „Ново возило“.</p>
+        {% for error in vehicle_choice.existing_vehicle.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+    {% endif %}
+</div>
+<div data-mode="none"><p class="text-secondary small">Возачот нема да може да почне смена додека не му доделите возило.</p></div>
+<script>
+(function () {
+    const box = document.currentScript.parentElement;
+    function update() {
+        const mode = box.querySelector('input[name=vehicle_mode]:checked').value;
+        box.querySelectorAll('[data-mode]').forEach(el => {
+            el.hidden = el.dataset.mode !== mode;
+            el.querySelectorAll('input, select').forEach(i => i.disabled = el.hidden);
+        });
+    }
+    box.querySelectorAll('input[name=vehicle_mode]').forEach(r => r.addEventListener('change', update));
+    update();
+})();
+</script>

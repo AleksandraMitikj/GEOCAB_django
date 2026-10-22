@@ -1,0 +1,107 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Мои возења - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-9">
+
+<h1 class="h3 mb-3">Мои возења</h1>
+
+<div class="row g-3 mb-4 text-center">
+    <div class="col-4">
+        <div class="card border-0 shadow-sm"><div class="card-body py-3">
+            <div class="fs-3 fw-semibold">{{ total_rides }}</div><div class="small text-secondary">завршени возења</div>
+        </div></div>
+    </div>
+    <div class="col-4">
+        <div class="card border-0 shadow-sm"><div class="card-body py-3">
+            <div class="fs-3 fw-semibold">{{ total_km }}</div><div class="small text-secondary">km</div>
+        </div></div>
+    </div>
+    <div class="col-4">
+        <div class="card border-0 shadow-sm"><div class="card-body py-3">
+            <div class="fs-3 fw-semibold">{{ total_spent }}</div><div class="small text-secondary">ден. потрошено</div>
+        </div></div>
+    </div>
+</div>
+
+{% for r in page %}
+    <div class="card border-0 shadow-sm mb-2">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+                <div>
+                    <span class="badge text-bg-{{ r.color }}">{{ r.label }}</span>
+                    <span class="small text-secondary ms-1">{{ r.request_time|date:"d.m.Y H:i" }} · #{{ r.ride_id }}</span>
+                </div>
+                <div class="fw-semibold">
+                    {% if r.ride_status == 'completed' %}
+                        {{ r.final_price }} ден.
+                    {% elif r.cancellation_fee %}
+                        казна {{ r.cancellation_fee }} ден.
+                    {% endif %}
+                    {% if r.payment_status == 'completed' %}
+                        <span class="badge text-bg-light border ms-1">✓ платено</span>
+                    {% elif r.payment_status == 'pending' %}
+                        <span class="badge text-bg-warning ms-1">чека плаќање</span>
+                    {% elif r.payment_status == 'refunded' %}
+                        <span class="badge text-bg-info ms-1">вратено</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="small mt-2">
+                🟢 {{ r.pickup_address }}<br>🔴 {{ r.dropoff_address }}
+            </div>
+            <div class="small text-secondary mt-1">
+                {{ r.distance_km }} km
+                {% if r.driver_name and r.ride_status == 'completed' %} · {{ r.driver_name }} · {{ r.vehicle_plate }} ({{ r.vehicle_class }}){% endif %}
+                {% if r.discount_percentage > 0 %} · попуст {{ r.discount_percentage|floatformat:0 }}%{% endif %}
+            </div>
+
+            {% if r.ride_status == 'cancelled' %}
+                <div class="small text-danger mt-1">
+                    Откажано {{ r.cancelled_by_label }}{% if r.is_no_show %} - не се појавивте{% endif %}{% if r.cancellation_reason %}: „{{ r.cancellation_reason }}“{% endif %}
+                </div>
+            {% endif %}
+
+            {% if r.rating_score %}
+                <div class="small mt-1">⭐ {{ r.rating_score }}/5{% if r.rating_comment %} · „{{ r.rating_comment }}“{% endif %}</div>
+            {% elif r.can_rate %}
+                <form method="post" action="{% url 'ride_rate' r.ride_id %}" class="d-flex gap-2 align-items-center mt-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <select name="score" class="form-select form-select-sm w-auto" required>
+                        <option value="">Оцени...</option>
+                        {% for n in '54321' %}<option value="{{ n }}">{{ n }} ★</option>{% endfor %}
+                    </select>
+                    <input type="text" name="comment" maxlength="255" class="form-control form-control-sm" placeholder="Коментар (опционално)">
+                    <button type="submit" class="btn btn-sm btn-dark">Оцени</button>
+                </form>
+            {% endif %}
+
+            {% if r.label == 'Во тек' %}
+                <a href="{% url 'ride_current' %}" class="small">Погледни го возењето →</a>
+            {% endif %}
+        </div>
+    </div>
+{% empty %}
+    <div class="card border-0 shadow-sm"><div class="card-body text-center py-5">
+        <p class="text-secondary">Сè уште немате возења.</p>
+        <a href="{% url 'ride_new' %}" class="btn btn-dark">Побарај возење</a>
+    </div></div>
+{% endfor %}
+
+{% if page.has_other_pages %}
+    <nav class="d-flex justify-content-center mt-3">
+        <ul class="pagination pagination-sm">
+            {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page.previous_page_number }}">‹</a></li>{% endif %}
+            <li class="page-item disabled"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }}</span></li>
+            {% if page.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page.next_page_number }}">›</a></li>{% endif %}
+        </ul>
+    </nav>
+{% endif %}
+
+</div>
+</div>
+{% endblock %}

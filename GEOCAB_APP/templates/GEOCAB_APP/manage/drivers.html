@@ -1,0 +1,58 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Возачи - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h3 mb-0">Возачи</h1>
+    <a href="{% url 'manage_driver_new' %}" class="btn btn-dark">+ Нов возач</a>
+</div>
+
+<form method="get" class="d-flex flex-wrap gap-2 mb-3">
+    <input type="search" name="q" value="{{ q }}" class="form-control w-auto flex-grow-1" placeholder="Име, корисничко име, телефон или таблица">
+    <div class="form-check align-self-center">
+        <input class="form-check-input" type="checkbox" name="debt" value="1" id="debt" {% if debt %}checked{% endif %} onchange="this.form.submit()">
+        <label class="form-check-label" for="debt">Само должници</label>
+    </div>
+    <button class="btn btn-outline-dark">Барај</button>
+</form>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr class="small text-secondary">
+                <th>Возач</th><th>Возила</th><th>Статус</th><th class="text-end">Оценка</th>
+                <th class="text-end">Возења</th><th class="text-end">Заработил</th><th class="text-end">Должи</th>
+            </tr></thead>
+            <tbody>
+            {% for r in rows %}
+                <tr onclick="location='{% url 'manage_driver' r.driver.pk %}'" style="cursor:pointer">
+                    <td>
+                        <a href="{% url 'manage_driver' r.driver.pk %}" class="fw-semibold text-decoration-none">{{ r.driver.name }}</a>
+                        <div class="small text-secondary">{{ r.driver.username }} · {{ r.driver.phone }}</div>
+                    </td>
+                    <td class="small">{{ r.plates|join:", "|default:"—" }}</td>
+                    <td>
+                        {% if r.debt == 'blocked' %}<span class="badge text-bg-danger">блокиран (долг)</span>
+                        {% elif r.debt == 'warning' %}<span class="badge text-bg-warning">опомена</span>{% endif %}
+                        {% if r.driver.status.status_text != 'active' %}
+                            <span class="badge text-bg-secondary">блокиран</span>
+                        {% elif r.on_shift %}
+                            <span class="badge text-bg-success">на смена</span>
+                        {% else %}
+                            <span class="badge text-bg-light border">активен</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">⭐ {{ r.driver.rating }}</td>
+                    <td class="text-end">{{ r.summary.completed_rides|default:0 }}</td>
+                    <td class="text-end">{{ r.summary.driver_earnings|default:0 }}</td>
+                    <td class="text-end fw-semibold {% if r.balance > 0 %}text-danger{% endif %}">{{ r.balance }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7" class="text-center text-secondary py-4">Нема возачи.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

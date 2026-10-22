@@ -1,0 +1,214 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load static geocab %}
+
+{% block title %}Моето возење - GEOCAB{% endblock %}
+
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <h1 class="h3 mb-3">Моето возење</h1>
+
+        {% if unpaid_fees %}
+            <div class="alert alert-warning small">
+                Имате неплатена казна за откажување: <strong>{{ unpaid_fees_total }} ден.</strong>
+                Ќе ја платите во готовина на возачот, заедно со следното возење.
+            </div>
+        {% endif %}
+
+        {% if ride %}
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        {% if ride.ride_status == 'requested' %}
+                            <div class="spinner-border text-dark" role="status"></div>
+                        {% else %}
+                            <span class="fs-2">🚕</span>
+                        {% endif %}
+                        <div>
+                            <div class="fw-semibold">{{ status_label }}</div>
+                            <div class="small text-secondary">Возење #{{ ride.ride_id }} · побарано {{ ride.request_time|date:"H:i" }}</div>
+                        </div>
+                    </div>
+
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">🟢 <strong>Од:</strong> {{ ride.pickup_ulica }} {{ ride.pickup_broj }}, {{ ride.pickup_naselba }}, {{ ride.pickup_grad }}</li>
+                        <li class="mb-2">🔴 <strong>До:</strong> {{ ride.dropoff_ulica }} {{ ride.dropoff_broj }}, {{ ride.dropoff_naselba }}, {{ ride.dropoff_grad }}</li>
+                        <li>📏 <strong>Растојание:</strong> {{ ride.distance_km }} km</li>
+                    </ul>
+                </div>
+            </div>
+
+            {# ---------- Мапа во живо ---------- #}
+            <div class="card border-0 shadow-sm mb-3 overflow-hidden">
+                <div id="live-map" style="height: 320px"
+                     data-pickup="{{ ride.pickup_lat|stringformat:'s' }},{{ ride.pickup_lng|stringformat:'s' }}"
+                     data-dropoff="{{ ride.dropoff_lat|stringformat:'s' }},{{ ride.dropoff_lng|stringformat:'s' }}"
+                     data-status="{{ ride.ride_status }}"></div>
+                <div class="card-body pt-2 pb-0 small text-secondary">
+                    <span style="color:#0d6efd">━</span> возачот до вас · <span style="color:#198754">┅</span> вашето возење
+                </div>
+                <div class="card-body py-2 small d-flex justify-content-between flex-wrap gap-2">
+                    <span id="eta">{% if ride.ride_status == 'requested' %}Се бара возач...{% else %}Се вчитува позицијата на возачот...{% endif %}</span>
+                    <span class="text-secondary" id="gps-note"></span>
+                </div>
+            </div>
+
+            {% if ride.driver_id %}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body">
+                        <h2 class="h6 mb-3">Возач</h2>
+                        <div class="row small">
+                            <div class="col-6 mb-2"><span class="text-secondary">Име</span><br>{{ ride.driver_name }}</div>
+                            <div class="col-6 mb-2"><span class="text-secondary">Оценка</span><br>⭐ {{ ride.driver_rating }}</div>
+                            {% if ride.ride_status != 'requested' %}
+                                <div class="col-6 mb-2"><span class="text-secondary">Телефон</span><br>{{ ride.driver_phone }}</div>
+                                <div class="col-6 mb-2"><span class="text-secondary">Возило</span><br>{{ ride.vehicle_brand|default:'' }} {{ ride.vehicle_model|default:'' }}, {{ ride.vehicle_color|default:'' }}</div>
+                                <div class="col-6"><span class="text-secondary">Таблица</span><br><span class="badge text-bg-light border fs-6">{{ ride.vehicle_plate }}</span></div>
+                                <div class="col-6"><span class="text-secondary">Класа</span><br>{{ ride.vehicle_class }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if report_categories %}{% include 'GEOCAB_APP/partials/report_problem.html' %}<div class="mb-3"></div>{% endif %}
+
+            {% if ride.ride_status != 'in_progress' %}
+                <form method="post" action="{% url 'ride_cancel' %}"
+                      onsubmit="return confirm('Дали сигурно сакате да го откажете возењето?');">
+                    {% csrf_token %}
+                    {% if cancellation_fee > 0 %}
+                        <div class="alert alert-warning small">Ако откажете сега, казната е <strong>{{ cancellation_fee }} ден.</strong></div>
+                    {% endif %}
+                    <button type="submit" class="btn btn-outline-danger w-100">Откажи возење</button>
+                </form>
+            {% endif %}
+            <p class="small text-secondary text-center mt-3">Страницата се освежува автоматски.</p>
+
+        {% elif last_payment %}
+            {# ---------- Завршено возење: плаќање и оценка ---------- #}
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body text-center py-4">
+                    <div class="fs-1">🏁</div>
+                    <h2 class="h5">Пристигнавте! Возење #{{ last_ride.ride_id }}</h2>
+                    <p class="text-secondary small mb-3">
+                        {{ last_ride.distance_km }} km{% if last_ride.discount_percentage > 0 %} · попуст {{ last_ride.discount_percentage|floatformat:0 }}%{% endif %}
+                        · возач {{ last_ride.driver.name }}
+                    </p>
+                    <div class="display-6 fw-bold">{{ last_payment.amount }} ден.</div>
+                    {% if last_payment.status.status_text == 'completed' %}
+                        <span class="badge text-bg-success mt-2">✓ Платено во готовина</span>
+                    {% else %}
+                        <p class="mt-2 mb-0">💵 Платете во готовина на возачот.</p>
+                        <p class="small text-secondary">Чекаме возачот да го потврди плаќањето...</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if can_rate %}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body">
+                        <h2 class="h6 text-center">Како беше возењето со {{ last_ride.driver.name }}?</h2>
+                        <form method="post" action="{% url 'ride_rate' last_ride.ride_id %}">
+                            {% csrf_token %}
+                            <div class="d-flex justify-content-center gap-1 my-3 stars">
+                                {% for n in '12345' %}
+                                    <input type="radio" class="btn-check" name="score" id="star{{ n }}" value="{{ n }}" required>
+                                    <label class="btn btn-outline-warning fs-4 px-3" for="star{{ n }}">{{ n }}★</label>
+                                {% endfor %}
+                            </div>
+                            <textarea name="comment" class="form-control mb-3" rows="2" maxlength="255"
+                                      placeholder="Коментар (опционално)"></textarea>
+                            <button type="submit" class="btn btn-dark w-100">Оцени</button>
+                        </form>
+                    </div>
+                </div>
+            {% else %}
+                <p class="text-center text-secondary small">✓ Возењето е оценето. Ви благодариме!</p>
+            {% endif %}
+            <a href="{% url 'ride_new' %}" class="btn btn-outline-dark w-100">Ново возење</a>
+
+        {% else %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center py-5">
+                    {% if last_ride and last_label %}
+                        <p class="mb-1 fw-semibold">Последно возење #{{ last_ride.ride_id }}: {{ last_label }}</p>
+                    {% endif %}
+                    <p class="text-secondary">Немате активно возење.</p>
+                    <a href="{% url 'ride_new' %}" class="btn btn-dark">Побарај возење</a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if ride %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static_v 'GEOCAB_APP/geocab_map.js' %}"></script>
+<script>
+// Мапа во живо: таксито се движи, а патот и времето до пристигнување се пресметуваат по улиците
+(function () {
+    const el = document.getElementById('live-map');
+    const parse = v => { const [a, b] = v.split(',').map(parseFloat); return L.latLng(a, b); };
+    const pickup = parse(el.dataset.pickup), dropoff = parse(el.dataset.dropoff), status = el.dataset.status;
+    const map = GeocabMap.create('live-map');
+    L.marker(pickup, {icon: GeocabMap.icon('#198754')}).addTo(map).bindTooltip('🟢 Подигање');
+    L.marker(dropoff, {icon: GeocabMap.icon('#dc3545')}).addTo(map).bindTooltip('🔴 Дестинација');
+    GeocabMap.fit(map, [pickup, dropoff], 0.3);
+    // патот на возењето (подигање → дестинација) по улиците
+    GeocabMap.route(pickup, dropoff)
+        .then(r => L.polyline(r.coords, {color: '#198754', weight: 4, opacity: .7, dashArray: '8 8'}).addTo(map))
+        .catch(() => L.polyline([pickup, dropoff], {color: '#198754', weight: 3, opacity: .5, dashArray: '4 8'}).addTo(map));
+    let car = null, line = null, lastRouteAt = 0, fitted = false;
+    const eta = document.getElementById('eta'), note = document.getElementById('gps-note');
+
+    async function update() {
+        let data;
+        try { data = await (await fetch('{% url "ride_track" %}')).json(); } catch (e) { return; }
+        if (!data.driver) return;
+        const pos = L.latLng(data.driver.lat, data.driver.lng);
+        if (!car) car = L.marker(pos, {icon: GeocabMap.carIcon(), zIndexOffset: 1000}).addTo(map).bindTooltip('🚕 Вашиот возач');
+        else car.setLatLng(pos);
+        note.textContent = data.driver.gps ? '📡 позиција во живо' : '📍 последна позната позиција';
+        const target = status === 'in_progress' ? dropoff : pickup;
+        if (!fitted) { GeocabMap.fit(map, [pos, pickup, dropoff]); fitted = true; }
+        if (Date.now() - lastRouteAt < 15000) return;
+        lastRouteAt = Date.now();
+        try {
+            const r = await GeocabMap.route(pos, target);
+            if (line) map.removeLayer(line);
+            line = L.polyline(r.coords, {color: '#0d6efd', weight: 5, opacity: .75}).addTo(map);
+            if (status === 'in_progress') eta.innerHTML = `🏁 До дестинацијата: <strong>${GeocabMap.formatDistance(r.distance)}</strong> · околу ${GeocabMap.formatDuration(r.duration)}`;
+            else if (status === 'driver_arrived') eta.innerHTML = '🚕 <strong>Возачот е тука</strong> - ве чека на местото за подигање.';
+            else eta.innerHTML = `🚕 Возачот е на <strong>${GeocabMap.formatDistance(r.distance)}</strong> · пристигнува за околу <strong>${GeocabMap.formatDuration(r.duration)}</strong>`;
+        } catch (e) {
+            eta.textContent = `🚕 Возачот е на ${GeocabMap.formatDistance(map.distance(pos, target))} (воздушно)`;
+        }
+    }
+    {% if ride.ride_status != 'requested' %}update(); setInterval(update, 5000);{% endif %}
+})();
+</script>
+{% endif %}
+{% if ride or last_payment.status.status_text == 'pending' %}
+<script>
+// На 5 секунди проверува дали се сменил статусот, возачот или плаќањето и ја освежува страницата
+(function () {
+    {% if ride %}
+    const current = JSON.stringify({status: '{{ ride.ride_status }}', driver_id: {{ ride.driver_id|default:'null' }}});
+    {% else %}
+    const current = JSON.stringify({status: null, payment: 'pending'});
+    {% endif %}
+    setInterval(async () => {
+        try {
+            const data = await (await fetch('{% url "ride_current_status" %}')).json();
+            if (JSON.stringify(data) !== current && !document.querySelector('.modal.show')) location.reload();
+        } catch (e) {}
+    }, 5000);
+})();
+</script>
+{% endif %}
+{% endblock %}

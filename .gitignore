@@ -1,0 +1,21 @@
+# Виртуелна средина (се креира пак со: python -m venv .venv && pip install -r requirements.txt)
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Django
+db.sqlite3
+/staticfiles/
+/media/
+
+# Поставки на уредувачот и системот
+.idea/
+.vscode/
+.DS_Store
+
+# Логови и локални env фајлови
+*.log
+.env

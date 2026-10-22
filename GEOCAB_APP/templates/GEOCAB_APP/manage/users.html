@@ -1,0 +1,73 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Корисници - GEOCAB{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Корисници</h1>
+
+<form method="get" class="d-flex gap-2 mb-3">
+    <input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Име, корисничко име, телефон или е-пошта">
+    <button class="btn btn-outline-dark">Барај</button>
+</form>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr class="small text-secondary">
+                <th>Корисник</th><th>Регистриран</th><th class="text-end">Завршени</th><th class="text-end">Откажани</th><th class="text-end">Потрошено</th><th>Статус</th><th></th>
+            </tr></thead>
+            <tbody>
+            {% for r in page %}
+                <tr>
+                    <td><strong>{{ r.user.name }}</strong><div class="small text-secondary">{{ r.user.username }} · {{ r.user.phone }} · {{ r.user.email }}</div></td>
+                    <td class="small">{{ r.user.created_at|date:"d.m.Y" }}</td>
+                    <td class="text-end">{{ r.user.completed }}</td>
+                    <td class="text-end {% if r.user.cancelled > r.user.completed and r.user.cancelled > 2 %}text-danger fw-semibold{% endif %}">{{ r.user.cancelled }}</td>
+                    <td class="text-end">{{ r.spent }} ден.</td>
+                    <td>
+                        {% if r.user.status.status_text == 'active' %}<span class="badge text-bg-light border">активен</span>
+                        {% else %}<span class="badge text-bg-secondary">{{ r.user.status.status_text }}</span>{% endif %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <button class="btn btn-outline-dark btn-sm" data-bs-toggle="collapse" data-bs-target="#pw{{ r.user.pk }}" title="Нова лозинка">🔑</button>
+                        <form method="post" class="d-inline" action="{% url 'manage_user_action' r.user.pk %}"
+                              onsubmit="return confirm('{% if r.user.status.status_text == 'active' %}Да го блокирам {{ r.user.name }}? Нема да може да се најави.{% else %}Да го активирам {{ r.user.name }}?{% endif %}');">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            {% if r.user.status.status_text == 'active' %}
+                                <input type="hidden" name="action" value="block"><button class="btn btn-outline-danger btn-sm">Блокирај</button>
+                            {% else %}
+                                <input type="hidden" name="action" value="unblock"><button class="btn btn-outline-success btn-sm">Активирај</button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+                <tr class="collapse" id="pw{{ r.user.pk }}">
+                    <td colspan="7">
+                        <form method="post" action="{% url 'manage_user_action' r.user.pk %}" class="d-flex gap-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="set_password">
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <input type="password" name="new_password" class="form-control form-control-sm" placeholder="Нова лозинка за {{ r.user.name }} (мин. 8 знаци)" required>
+                            <button class="btn btn-dark btn-sm text-nowrap">Постави</button>
+                        </form>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7" class="text-center text-secondary py-4">Нема корисници.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if page.has_other_pages %}
+    <nav class="d-flex justify-content-center mt-3">
+        <ul class="pagination pagination-sm">
+            {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&page={{ page.previous_page_number }}">‹</a></li>{% endif %}
+            <li class="page-item disabled"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }}</span></li>
+            {% if page.has_next %}<li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&page={{ page.next_page_number }}">›</a></li>{% endif %}
+        </ul>
+    </nav>
+{% endif %}
+{% endblock %}

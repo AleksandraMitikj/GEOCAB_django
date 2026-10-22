@@ -1,0 +1,29 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Известувања - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-7">
+
+<h1 class="h3 mb-3">🔔 Известувања</h1>
+
+{% if notifications %}
+    <div class="list-group shadow-sm">
+        {% for n in notifications %}
+            <div class="list-group-item{% if n.is_new %} list-group-item-primary{% endif %}">
+                <div class="d-flex justify-content-between gap-2">
+                    <span class="{% if n.is_new %}fw-semibold{% endif %}">{{ n.text }}</span>
+                    <span class="small text-secondary text-nowrap">{{ n.sent_time|date:"d.m H:i" }}</span>
+                </div>
+                <div class="small text-secondary">Возење #{{ n.ride_id }} · {{ n.pickup_address }} → {{ n.dropoff_address }}</div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card border-0 shadow-sm"><div class="card-body text-center py-5 text-secondary">Немате известувања.</div></div>
+{% endif %}
+
+</div>
+</div>
+{% endblock %}

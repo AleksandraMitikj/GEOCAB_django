@@ -1,0 +1,12 @@
+{% extends 'GEOCAB_APP/account/_card.html' %}
+{% block title %}Возило {{ vehicle.plate }} - GEOCAB{% endblock %}
+{% block card %}
+{% if back %}<a href="{% url 'manage_driver' back %}" class="small">← Назад кон возачот</a>{% else %}<a href="{% url 'manage_drivers' %}" class="small">← Возачи</a>{% endif %}
+<h1 class="h4 mt-2 mb-1">Уреди возило</h1>
+<p class="small text-secondary mb-4">Возачи: {% for d in drivers %}{{ d.name }}{% if not forloop.last %}, {% endif %}{% empty %}не е доделено{% endfor %}</p>
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}{% include 'GEOCAB_APP/partials/field.html' %}{% endfor %}
+    <button type="submit" class="btn btn-dark w-100">Зачувај возило</button>
+</form>
+{% endblock %}

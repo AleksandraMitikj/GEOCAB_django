@@ -1,0 +1,167 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load static geocab %}
+
+{% block title %}Побарај возење - GEOCAB{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+    #map { height: 460px; border-radius: .5rem; cursor: crosshair; }
+    .point-card.active { outline: 2px solid var(--bs-dark); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Побарај возење</h1>
+
+{% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+{% if form.pickup_lat.errors or form.dropoff_lat.errors %}
+    <div class="alert alert-danger">Изберете ги двете точки на мапата.</div>
+{% endif %}
+
+<form method="post" id="ride-form" novalidate>
+    {% csrf_token %}
+    {{ form.pickup_lat }}{{ form.pickup_lng }}{{ form.dropoff_lat }}{{ form.dropoff_lng }}
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="btn-group w-100 mb-2" role="group">
+                <input type="radio" class="btn-check" name="mode" id="mode-pickup" value="pickup" checked>
+                <label class="btn btn-outline-success" for="mode-pickup">🟢 Од каде</label>
+                <input type="radio" class="btn-check" name="mode" id="mode-dropoff" value="dropoff">
+                <label class="btn btn-outline-danger" for="mode-dropoff">🔴 До каде</label>
+            </div>
+            <div id="map" class="shadow-sm"></div>
+            <div class="small mt-2 fw-semibold" id="route-info"></div>
+            <p class="small text-secondary mt-1 mb-0">
+                Кликнете на мапата за да ја поставите точката. Маркерот може и да се влече.
+            </p>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm mb-3 point-card" id="card-pickup">
+                <div class="card-body">
+                    <h2 class="h6 text-success">🟢 Од каде</h2>
+                    <div class="row g-2">
+                        <div class="col-6">{% include 'GEOCAB_APP/partials/field.html' with field=form.pickup_grad %}</div>
+                        <div class="col-6">{% include 'GEOCAB_APP/partials/field.html' with field=form.pickup_naselba %}</div>
+                        <div class="col-8">{% include 'GEOCAB_APP/partials/field.html' with field=form.pickup_ulica %}</div>
+                        <div class="col-4">{% include 'GEOCAB_APP/partials/field.html' with field=form.pickup_broj %}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card border-0 shadow-sm mb-3 point-card" id="card-dropoff">
+                <div class="card-body">
+                    <h2 class="h6 text-danger">🔴 До каде</h2>
+                    <div class="row g-2">
+                        <div class="col-6">{% include 'GEOCAB_APP/partials/field.html' with field=form.dropoff_grad %}</div>
+                        <div class="col-6">{% include 'GEOCAB_APP/partials/field.html' with field=form.dropoff_naselba %}</div>
+                        <div class="col-8">{% include 'GEOCAB_APP/partials/field.html' with field=form.dropoff_ulica %}</div>
+                        <div class="col-4">{% include 'GEOCAB_APP/partials/field.html' with field=form.dropoff_broj %}</div>
+                    </div>
+                </div>
+            </div>
+
+            {% if estimates %}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body">
+                        <h2 class="h6">Изберете возило · {{ estimates.0.distance_km }} km {% if by_road %}по пат{% else %}<span class="text-secondary small">(воздушно)</span>{% endif %}</h2>
+                        <div class="list-group">
+                            <label class="list-group-item d-flex align-items-center gap-2">
+                                <input class="form-check-input m-0" type="radio" name="vehicle_class" value=""
+                                       {% if not selected_class %}checked{% endif %}>
+                                <span class="flex-grow-1">Било кое (најбрзо)</span>
+                            </label>
+                            {% for e in estimates %}
+                                <label class="list-group-item d-flex align-items-center gap-2">
+                                    <input class="form-check-input m-0" type="radio" name="vehicle_class" value="{{ e.vehicle_class }}"
+                                           {% if selected_class == e.vehicle_class %}checked{% endif %}>
+                                    <span class="flex-grow-1">{{ e.vehicle_class }}</span>
+                                    <span class="fw-semibold">{{ e.estimated_price }} ден.</span>
+                                    {% if e.discount_percentage > 0 %}
+                                        <span class="badge text-bg-success">-{{ e.discount_percentage|floatformat:0 }}%</span>
+                                    {% endif %}
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <p class="small text-secondary mt-2 mb-0">Цената е проценка. Конечната се пресметува на крајот на возењето.</p>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="d-grid gap-2">
+                <button type="submit" name="action" value="estimate" class="btn btn-outline-dark">
+                    {% if estimates %}Пресметај повторно{% else %}Пресметај цена{% endif %}
+                </button>
+                {% if estimates %}
+                    <button type="submit" name="action" value="request" class="btn btn-dark btn-lg">Побарај возење</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static_v 'GEOCAB_APP/geocab_map.js' %}"></script>
+<script>
+(function () {
+    const map = GeocabMap.create('map');
+    const mode = () => document.querySelector('input[name=mode]:checked').value;
+    let line = null;
+
+    function highlight() {
+        document.querySelectorAll('.point-card').forEach(c => c.classList.remove('active'));
+        document.getElementById(`card-${mode()}`).classList.add('active');
+    }
+    document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', highlight));
+    highlight();
+
+    // Пат по улиците помеѓу двете точки (ако сервисот за рути не одговори - права линија)
+    const info = document.getElementById('route-info');
+    let routeTimer = null, routeRequest = 0;
+    function drawLine() {
+        if (!(points.pickup.marker && points.dropoff.marker)) return;
+        clearTimeout(routeTimer);
+        routeTimer = setTimeout(async () => {
+            const a = points.pickup.marker.getLatLng(), b = points.dropoff.marker.getLatLng(), id = ++routeRequest;
+            info.textContent = '🧭 Се пресметува патот...';
+            let coords, text, style;
+            try {
+                const r = await GeocabMap.route(a, b);
+                coords = r.coords;
+                style = {color: '#0d6efd', weight: 5, opacity: .8};
+                text = `🧭 ${GeocabMap.formatDistance(r.distance)} по пат · околу ${GeocabMap.formatDuration(r.duration)} возење`;
+            } catch (e) {
+                coords = [a, b];
+                style = {color: '#212529', dashArray: '6 6'};
+                text = `📏 ${GeocabMap.formatDistance(map.distance(a, b))} воздушно (патот не може да се пресмета)`;
+            }
+            if (id !== routeRequest) return;  // точката е поместена во меѓувреме
+            if (line) map.removeLayer(line);
+            line = L.polyline(coords, style).addTo(map);
+            info.textContent = text;
+        }, 300);
+    }
+
+    const points = {};
+    points.pickup = GeocabMap.pointPicker(map, 'pickup', '#198754', () => points.dropoff && drawLine());
+    points.dropoff = GeocabMap.pointPicker(map, 'dropoff', '#dc3545', drawLine);
+
+    map.on('click', e => {
+        const prefix = mode();
+        points[prefix].set(e.latlng, true);
+        if (prefix === 'pickup' && !points.dropoff.marker) {
+            document.getElementById('mode-dropoff').checked = true;
+            highlight();
+        }
+    });
+
+    // По пресметка на цена - покажи ги двете точки
+    if (points.pickup.marker && points.dropoff.marker) {
+        map.fitBounds(L.latLngBounds([points.pickup.marker.getLatLng(), points.dropoff.marker.getLatLng()]).pad(0.3));
+    }
+})();
+</script>
+{% endblock %}

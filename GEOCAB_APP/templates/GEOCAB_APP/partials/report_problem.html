@@ -1,0 +1,59 @@
+{# Копче и прозорец „Пријави проблем“ - за корисник и возач додека возењето е во тек #}
+<button type="button" class="btn btn-outline-danger w-100 mt-2" data-bs-toggle="modal" data-bs-target="#reportModal">
+    ⚠️ Пријави проблем / итен случај
+</button>
+
+{% if my_reports %}
+    <div class="small mt-2">
+        {% for r in my_reports %}
+            <div class="text-secondary">
+                📨 Пријава #{{ r.report_id }} · {{ r.created_at|date:"H:i" }} ·
+                {% if r.report_status == 'open' %}<span class="text-warning-emphasis">се разгледува</span>{% else %}<span class="text-success">решена</span>{% if r.admin_note %}: „{{ r.admin_note }}“{% endif %}{% endif %}
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="reportTitle">⚠️ Пријави проблем</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Затвори"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger py-2 mb-3">
+                    <div class="fw-semibold mb-2">Итен случај? Јавете се веднаш:</div>
+                    <div class="row g-2 text-center">
+                        <div class="col-6 col-sm-3"><a href="tel:192" class="btn btn-danger w-100 py-2">🚓<br><strong>192</strong><br><small>Полиција</small></a></div>
+                        <div class="col-6 col-sm-3"><a href="tel:194" class="btn btn-danger w-100 py-2">🚑<br><strong>194</strong><br><small>Брза помош</small></a></div>
+                        <div class="col-6 col-sm-3"><a href="tel:193" class="btn btn-danger w-100 py-2">🚒<br><strong>193</strong><br><small>Пожарна</small></a></div>
+                        <div class="col-6 col-sm-3"><a href="tel:112" class="btn btn-dark w-100 py-2">🆘<br><strong>112</strong><br><small>Итни служби</small></a></div>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'report_problem' %}" id="reportForm">
+                    {% csrf_token %}
+                    <div class="small text-secondary mb-2">
+                        Порака до GEOCAB за возење #{{ report_ride_id }} · испраќа: <strong>{{ request.person.name }}</strong>
+                        ({% if request.role == 'driver' %}возач{% else %}корисник{% endif %})
+                    </div>
+                    <label class="form-label" for="report-category">Тип на проблем</label>
+                    <select name="category" id="report-category" class="form-select mb-3" required>
+                        <option value="">Изберете...</option>
+                        {% for key, label in report_categories.items %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                    </select>
+                    <label class="form-label" for="report-message">Опишете што се случува</label>
+                    <textarea name="message" id="report-message" class="form-control" rows="4" maxlength="1000" required
+                              placeholder="на пр. возачот вози пребрзо, возилото не е исто како во апликацијата..."></textarea>
+                    <div class="form-text">Пораката ја гледа тимот на GEOCAB заедно со деталите за возењето.</div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <a href="tel:{{ contact.phone|cut:' ' }}" class="btn btn-link me-auto">📞 GEOCAB {{ contact.phone }}</a>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Откажи</button>
+                <button type="submit" form="reportForm" class="btn btn-danger">Испрати пријава</button>
+            </div>
+        </div>
+    </div>
+</div>

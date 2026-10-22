@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Заедница">
+  <rect width="400" height="300" rx="24" fill="#e7ecff"/>
+  <path d="M0 230 Q200 180 400 230 V300 H0 Z" fill="#cfd8ff"/>
+  <!-- три лица -->
+  <g transform="translate(110 150)"><path d="M-46 110 Q-46 40 0 36 Q46 40 46 110 Z" fill="#198754"/><circle cx="0" cy="0" r="32" fill="#f2c4a0"/><path d="M-32 -4 Q-30 -36 0 -36 Q30 -36 32 -4 Q22 -20 0 -20 Q-22 -20 -32 -4 Z" fill="#6b3e26"/></g>
+  <g transform="translate(290 150)"><path d="M-46 110 Q-46 40 0 36 Q46 40 46 110 Z" fill="#dc3545"/><circle cx="0" cy="0" r="32" fill="#d9a07a"/><path d="M-34 6 Q-36 -38 0 -36 Q36 -38 34 6 Q34 -16 22 -22 Q0 -12 -22 -22 Q-34 -16 -34 6 Z" fill="#2b1d14"/></g>
+  <g transform="translate(200 125)"><path d="M-54 140 Q-54 50 0 46 Q54 50 54 140 Z" fill="#1b1f3b"/><path d="M-14 48 L0 76 L14 48" fill="#ffc107"/><circle cx="0" cy="0" r="38" fill="#f6d2b3"/>
+    <path d="M-40 -6 Q-38 -46 0 -46 Q38 -46 40 -6 Z" fill="#1b1f3b"/><rect x="-44" y="-10" width="88" height="9" rx="4" fill="#ffc107"/></g>
+  <!-- срца / ѕвезди -->
+  <g fill="#ffc107"><path d="M60 60 l6 13 14 2 -10 10 2 14 -12 -7 -12 7 2 -14 -10 -10 14 -2 z"/><path d="M330 50 l5 10 11 2 -8 8 2 11 -10 -6 -10 6 2 -11 -8 -8 11 -2 z"/></g>
+  <path d="M200 40 c-8 -14 -30 -8 -26 8 c3 12 26 26 26 26 s23 -14 26 -26 c4 -16 -18 -22 -26 -8 z" fill="#ff5a5f"/>
+</svg>

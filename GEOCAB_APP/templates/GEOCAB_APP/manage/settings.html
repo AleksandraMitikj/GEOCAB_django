@@ -1,0 +1,81 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Поставки - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-9">
+<h1 class="h3 mb-3">Поставки</h1>
+
+{# ---------- Провизија ---------- #}
+<div class="card border-0 shadow-sm mb-4"><div class="card-body">
+    <h2 class="h6">Провизија на платформата</h2>
+    <p class="small text-secondary">
+        Сега: GEOCAB <strong>{{ platform.commission_percentage|floatformat:0 }}%</strong>,
+        возачот добива остатокот. Последна промена {{ platform.updated_at|date:"d.m.Y H:i" }}.
+        Новиот процент важи само за <strong>новите</strong> плаќања. Старите возења остануваат пресметани со стариот.
+    </p>
+    <form method="post" class="row g-2 align-items-end" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="commission">
+        <div class="col-sm-4">{% include 'GEOCAB_APP/partials/field.html' with field=commission_form.commission_percentage %}</div>
+        <div class="col-sm-3 mb-3"><button class="btn btn-dark w-100">Зачувај</button></div>
+    </form>
+</div></div>
+
+{# ---------- Цени ---------- #}
+<div class="card border-0 shadow-sm mb-4"><div class="card-body">
+    <h2 class="h6 mb-3">Цени по класа на возило</h2>
+    <p class="small text-secondary">Цена = почетна + km × цена по km. Над 10 km корисникот добива 20% попуст (правило во базата).</p>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr class="small text-secondary"><th>Класа</th><th>Почетна цена</th><th>По km</th><th></th></tr></thead>
+            <tbody>
+            {% for c in classes %}
+                <tr>
+                    <td>
+                        <strong>{{ c.type.description }}</strong>
+                        <div class="small text-secondary">{{ c.type.type_name }} · {{ c.type.vehicles_model.model }} · {{ c.vehicles }} возила</div>
+                    </td>
+                    <td colspan="3">
+                        <form method="post" class="d-flex gap-2 align-items-center">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="price">
+                            <input type="hidden" name="vehicle_type_id" value="{{ c.type.vehicle_type_id }}">
+                            <input type="number" step="0.01" min="0" name="base_price" value="{{ c.rule.base_price|stringformat:'s' }}" class="form-control form-control-sm" required placeholder="почетна">
+                            <input type="number" step="0.01" min="0" name="price_per_km" value="{{ c.rule.price_per_km|stringformat:'s' }}" class="form-control form-control-sm" required placeholder="по km">
+                            <button class="btn btn-outline-dark btn-sm text-nowrap">Зачувај</button>
+                        </form>
+                        {% if not c.rule %}<div class="small text-danger mt-1">Нема цена - оваа класа не се нуди на корисниците.</div>{% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="4" class="text-secondary">Нема класи.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div></div>
+
+{# ---------- Нова класа ---------- #}
+<div class="card border-0 shadow-sm"><div class="card-body">
+    <a data-bs-toggle="collapse" href="#new-class" class="h6 text-decoration-none">+ Нова класа на возило</a>
+    <div class="collapse {% if new_class_form.errors %}show{% endif %} mt-3" id="new-class">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="new_class">
+            <div class="row g-2">
+                <div class="col-md-4">{% include 'GEOCAB_APP/partials/field.html' with field=new_class_form.description %}</div>
+                <div class="col-md-4">{% include 'GEOCAB_APP/partials/field.html' with field=new_class_form.type_name %}</div>
+                <div class="col-md-4">{% include 'GEOCAB_APP/partials/field.html' with field=new_class_form.model %}</div>
+                <div class="col-md-4">{% include 'GEOCAB_APP/partials/field.html' with field=new_class_form.base_price %}</div>
+                <div class="col-md-4">{% include 'GEOCAB_APP/partials/field.html' with field=new_class_form.price_per_km %}</div>
+            </div>
+            <button class="btn btn-dark">Додади класа</button>
+        </form>
+    </div>
+</div></div>
+
+</div>
+</div>
+{% endblock %}

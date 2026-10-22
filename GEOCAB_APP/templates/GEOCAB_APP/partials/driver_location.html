@@ -1,0 +1,12 @@
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <label class="form-label mb-0">Вашата моментална локација</label>
+    <button type="button" class="btn btn-sm btn-outline-primary use-my-location">📍 Користи моја локација</button>
+</div>
+<div id="map" class="shadow-sm mb-2"></div>
+<p class="small text-secondary">Кликнете на мапата каде се наоѓате.</p>
+<div class="row g-2">
+    <div class="col-6">{% include 'GEOCAB_APP/partials/field.html' with field=form.loc_grad %}</div>
+    <div class="col-6">{% include 'GEOCAB_APP/partials/field.html' with field=form.loc_naselba %}</div>
+    <div class="col-8">{% include 'GEOCAB_APP/partials/field.html' with field=form.loc_ulica %}</div>
+    <div class="col-4">{% include 'GEOCAB_APP/partials/field.html' with field=form.loc_broj %}</div>
+</div>

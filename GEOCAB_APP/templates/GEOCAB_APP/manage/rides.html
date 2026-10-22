@@ -1,0 +1,63 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load geocab %}
+
+{% block title %}Возења - GEOCAB{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Возења</h1>
+
+<div class="d-flex flex-wrap gap-1 mb-2">
+    <a href="?" class="btn btn-sm {% if not status %}btn-dark{% else %}btn-outline-dark{% endif %}">Сите</a>
+    <a href="?status=active" class="btn btn-sm {% if status == 'active' %}btn-primary{% else %}btn-outline-primary{% endif %}">Во тек</a>
+    <a href="?status=completed" class="btn btn-sm {% if status == 'completed' %}btn-success{% else %}btn-outline-success{% endif %}">Завршени</a>
+    <a href="?status=cancelled" class="btn btn-sm {% if status == 'cancelled' %}btn-danger{% else %}btn-outline-danger{% endif %}">Откажани</a>
+    <a href="?status=no_driver" class="btn btn-sm {% if status == 'no_driver' %}btn-warning{% else %}btn-outline-warning{% endif %}">Немаше возач</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <input type="hidden" name="status" value="{{ status }}">
+    <div class="col-md-5"><input type="search" name="q" value="{{ filters.q }}" class="form-control" placeholder="Корисник, возач, таблица или број на возење"></div>
+    <div class="col-6 col-md-2"><input type="date" name="from" value="{{ filters.from }}" class="form-control" title="Од датум"></div>
+    <div class="col-6 col-md-2"><input type="date" name="to" value="{{ filters.to }}" class="form-control" title="До датум"></div>
+    <div class="col-md-3 d-flex gap-2">
+        <button class="btn btn-outline-dark flex-fill">Филтрирај</button>
+        <a href="?" class="btn btn-link">Исчисти</a>
+    </div>
+</form>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 small">
+            <thead><tr class="text-secondary">
+                <th>#</th><th>Време</th><th>Корисник</th><th>Возач</th><th>Од → До</th><th>Статус</th><th class="text-end">Цена</th><th>Плаќање</th>
+            </tr></thead>
+            <tbody>
+            {% for r in page %}
+                <tr onclick="location='{% url 'manage_ride' r.ride_id %}'" style="cursor:pointer">
+                    <td><a href="{% url 'manage_ride' r.ride_id %}">{{ r.ride_id }}</a></td>
+                    <td class="text-nowrap">{{ r.request_time|date:"d.m H:i" }}</td>
+                    <td>{{ r.user_name }}</td>
+                    <td>{{ r.driver_name|default:"—" }}{% if r.vehicle_plate %}<div class="text-secondary">{{ r.vehicle_plate }}</div>{% endif %}</td>
+                    <td>{{ r.pickup_naselba }} → {{ r.dropoff_naselba }}<div class="text-secondary">{{ r.distance_km }} km</div></td>
+                    <td><span class="badge {% if r.ride_status == 'completed' %}text-bg-success{% elif r.ride_status == 'cancelled' %}text-bg-danger{% elif r.ride_status == 'no_driver' %}text-bg-warning{% else %}text-bg-primary{% endif %}">{{ r.ride_status|ride_status }}</span></td>
+                    <td class="text-end">{{ r.final_price|default:"—" }}</td>
+                    <td>{% if r.payment %}{{ r.payment.amount }} · {{ r.payment.status.status_text }}{% else %}—{% endif %}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="8" class="text-center text-secondary py-4">Нема возења.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if page.has_other_pages %}
+    <nav class="d-flex justify-content-center mt-3">
+        <ul class="pagination pagination-sm">
+            {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ page.previous_page_number }}">‹</a></li>{% endif %}
+            <li class="page-item disabled"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }} · {{ page.paginator.count }} возења</span></li>
+            {% if page.has_next %}<li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ page.next_page_number }}">›</a></li>{% endif %}
+        </ul>
+    </nav>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}{{ driver.name }} - GEOCAB{% endblock %}
+
+{% block content %}
+<a href="{% url 'manage_drivers' %}" class="small">← Возачи</a>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-1 mb-3">
+    <div>
+        <h1 class="h3 mb-0">
+            {{ driver.name }}
+            {% if not is_active %}<span class="badge text-bg-secondary fs-6 align-middle">блокиран</span>
+            {% elif shift %}<span class="badge text-bg-success fs-6 align-middle">на смена</span>{% endif %}
+        </h1>
+        <div class="small text-secondary">
+            {{ driver.username }} · {{ driver.phone }} · {{ driver.email }} · возачка {{ driver.license_number }}<br>
+            ⭐ {{ driver.rating }} · регистриран {{ driver.registration_date|date:"d.m.Y" }} од {{ driver.created_by_admin.name }}
+            {% if shift %} · на смена од {{ shift.working_start|date:"H:i" }} со {{ shift.vehicle_ownership.plate }}{% endif %}
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+    <button class="btn btn-outline-dark btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-driver">✏️ Уреди податоци</button>
+    <button class="btn btn-outline-dark btn-sm" data-bs-toggle="collapse" data-bs-target="#set-password">🔑 Нова лозинка</button>
+    <form method="post" action="{% url 'manage_driver_action' driver.pk %}"
+          onsubmit="return confirm('{% if is_active %}Да го блокирам возачот? Нема да може да се најави.{% else %}Да го активирам возачот?{% endif %}');">
+        {% csrf_token %}
+        {% if is_active %}
+            <input type="hidden" name="action" value="block">
+            <button class="btn btn-outline-danger btn-sm">Блокирај</button>
+        {% else %}
+            <input type="hidden" name="action" value="unblock">
+            <button class="btn btn-outline-success btn-sm">Активирај</button>
+        {% endif %}
+    </form>
+    </div>
+</div>
+<div class="collapse mb-3" id="edit-driver">
+    <form method="post" action="{% url 'manage_driver_action' driver.pk %}" class="card card-body border-0 shadow-sm" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="edit">
+        <div class="row g-2">
+            {% for field in edit_form %}<div class="col-md-4">{% include 'GEOCAB_APP/partials/field.html' %}</div>{% endfor %}
+        </div>
+        <div><button class="btn btn-dark">Зачувај податоци</button></div>
+    </form>
+</div>
+<div class="collapse mb-3" id="set-password">
+    <form method="post" action="{% url 'manage_driver_action' driver.pk %}" class="card card-body border-0 shadow-sm d-flex flex-row flex-wrap gap-2 align-items-center">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="set_password">
+        <input type="password" name="new_password" class="form-control w-auto flex-grow-1" placeholder="Нова лозинка за возачот (мин. 8 знаци)" required>
+        <button class="btn btn-dark">Постави</button>
+        <span class="small text-secondary w-100">Користете кога возачот ја заборавил лозинката. Кажете му ја лично, а тој може да ја смени во „Мој профил“.</span>
+    </form>
+</div>
+
+{% include 'GEOCAB_APP/partials/debt_banner.html' %}
+
+<div class="row g-3">
+    {# ---------- Провизија ---------- #}
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100 {% if balance.balance > 0 %}border-start border-4 border-warning{% endif %}">
+            <div class="card-body">
+                <h2 class="h6 mb-3">Провизија за GEOCAB</h2>
+                <table class="table table-sm mb-3">
+                    <tr><td>Вкупна провизија од неговите возења</td><td class="text-end">{{ balance.total_commission }} ден.</td></tr>
+                    <tr><td>Уплатено</td><td class="text-end">{{ balance.total_paid }} ден.</td></tr>
+                    <tr class="{% if balance.balance > 0 %}table-warning{% else %}table-success{% endif %}">
+                        <td class="fw-semibold">Должи</td><td class="text-end fw-bold">{{ balance.balance }} ден.</td>
+                    </tr>
+                </table>
+                {% if balance.balance > 0 %}
+                    <form method="post" action="{% url 'manage_driver_action' driver.pk %}" class="row g-2 align-items-end" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="payout">
+                        <div class="col-sm-4">
+                            <label class="form-label small mb-1" for="id_amount">Износ (ден.)</label>
+                            <input type="number" step="0.01" min="0.01" max="{{ balance.balance|stringformat:'s' }}" name="amount" id="id_amount"
+                                   value="{{ payout_form.initial.amount|stringformat:'s' }}" class="form-control" required>
+                        </div>
+                        <div class="col-sm-5">
+                            <label class="form-label small mb-1" for="id_note">Забелешка</label>
+                            <input type="text" name="note" id="id_note" maxlength="255" class="form-control" placeholder="на пр. во готовина">
+                        </div>
+                        <div class="col-sm-3"><button class="btn btn-warning w-100">Евидентирај уплата</button></div>
+                    </form>
+                {% else %}
+                    <p class="text-success small mb-0">✓ Возачот нема долг кон GEOCAB.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ---------- Заработка ---------- #}
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 mb-3">Возења и заработка</h2>
+                <table class="table table-sm mb-0">
+                    <tr><td>Завршени возења</td><td class="text-end">{{ summary.completed_rides }} ({{ summary.total_km }} km)</td></tr>
+                    <tr><td>Наплатено од корисници</td><td class="text-end">{{ summary.total_collected }} ден.</td></tr>
+                    <tr><td>Заработка на возачот</td><td class="text-end fw-semibold">{{ summary.driver_earnings }} ден.</td></tr>
+                    <tr><td>Овој месец</td><td class="text-end">{{ summary.earnings_this_month }} ден.</td></tr>
+                    {% if summary.unpaid_amount %}<tr><td class="text-secondary">Уште ненаплатено од корисници</td><td class="text-end text-secondary">{{ summary.unpaid_amount }} ден.</td></tr>{% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {# ---------- Уплати ---------- #}
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 mb-3">Уплати на провизија</h2>
+                {% if payouts %}
+                    <table class="table table-sm small mb-0">
+                        <thead><tr class="text-secondary"><th>Датум</th><th class="text-end">Износ</th><th>Примил</th><th>Забелешка</th></tr></thead>
+                        <tbody>
+                        {% for p in payouts %}
+                            <tr><td>{{ p.paid_at|date:"d.m.Y H:i" }}</td><td class="text-end">{{ p.amount }}</td><td>{{ p.admin.name }}</td><td>{{ p.note|default:"" }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="text-secondary small mb-0">Нема уплати.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ---------- Возила ---------- #}
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 mb-3">Возила</h2>
+                {% for v in vehicles %}
+                    <div class="small mb-2 d-flex flex-wrap align-items-center gap-2">
+                        <span class="flex-grow-1">🚗 <strong>{{ v.plate }}</strong> · {{ v.vehicle_type.description }} · {{ v.color }} · {{ v.year }}</span>
+                        <a href="{% url 'manage_vehicle' v.pk %}?driver={{ driver.pk }}" class="btn btn-outline-dark btn-sm py-0">Уреди</a>
+                        <form method="post" action="{% url 'manage_driver_action' driver.pk %}" class="d-inline"
+                              onsubmit="return confirm('Да го отстранам {{ v.plate }} од возачот?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove_vehicle">
+                            <input type="hidden" name="vehicle_id" value="{{ v.pk }}">
+                            <button class="btn btn-outline-danger btn-sm py-0">Отстрани</button>
+                        </form>
+                    </div>
+                {% empty %}
+                    <p class="text-secondary small">Нема доделено возило - не може да почне смена.</p>
+                {% endfor %}
+                <a class="small d-inline-block mt-2" data-bs-toggle="collapse" href="#add-vehicle">+ Додели возило</a>
+                <div class="collapse mt-3" id="add-vehicle">
+                    <form method="post" action="{% url 'manage_driver_action' driver.pk %}" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_vehicle">
+                        <div>{% include 'GEOCAB_APP/manage/partials/vehicle_choice.html' %}</div>
+                        <button class="btn btn-dark btn-sm w-100">Додели</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,355 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load static geocab %}
+
+{% block title %}Возач - GEOCAB{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>#map { height: 340px; border-radius: .5rem; cursor: crosshair; }</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-8">
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Возач: {{ request.person.name }}</h1>
+    <span class="text-secondary">⭐ {{ request.person.rating }}</span>
+</div>
+
+{% include 'GEOCAB_APP/partials/debt_banner.html' %}
+
+{% if collect %}
+    {# ---------- Наплата во готовина за завршено возење ---------- #}
+    <div class="card border-0 shadow mb-3 border-start border-4 border-success">
+        <div class="card-body">
+            <h2 class="h5">💵 Наплатете во готовина</h2>
+            <p class="mb-2">Возење #{{ collect.ride.ride_id }} · {{ collect.ride.user.name }}</p>
+            <ul class="list-unstyled small mb-2">
+                <li>Возење: {{ collect.ride_amount }} ден.</li>
+                {% if collect.fees %}
+                    <li>Стара казна за откажување: {{ collect.fees_amount }} ден.</li>
+                {% endif %}
+            </ul>
+            <div class="fs-3 fw-bold mb-3">{{ collect.total }} ден.</div>
+            <form method="post" action="{% url 'driver_action' %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cash_received">
+                <input type="hidden" name="ride_id" value="{{ collect.ride.ride_id }}">
+                <button type="submit" class="btn btn-success btn-lg w-100">Примив готовина</button>
+            </form>
+        </div>
+    </div>
+{% endif %}
+
+{% if not shift %}
+    {# ---------- Нема смена ---------- #}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <h2 class="h5">Почни смена</h2>
+            {% if debt.level == 'blocked' %}
+                <div class="alert alert-danger mb-0">Не можете да почнете смена додека не го платите долгот за {{ debt.overdue_month_name }}.</div>
+            {% elif not vehicles %}
+                <div class="alert alert-warning mb-0">Немате доделено возило. Администраторот треба да ви додели возило.</div>
+            {% else %}
+                <form method="post" action="{% url 'driver_action' %}" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="start_shift">
+                    {{ form.loc_lat }}{{ form.loc_lng }}
+                    <div class="mb-3">
+                        <label class="form-label" for="id_vehicle_ownership">Возило</label>
+                        <select name="vehicle_ownership" id="id_vehicle_ownership" class="form-select">
+                            {% for v in vehicles %}
+                                <option value="{{ v.pk }}">{{ v.plate }} · {{ v.vehicle_type.description }} · {{ v.color }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% include 'GEOCAB_APP/partials/driver_location.html' %}
+                    <button type="submit" class="btn btn-success w-100 btn-lg mt-2">Почни смена</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
+{% else %}
+    {# ---------- На смена ---------- #}
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <span class="badge text-bg-success">На смена</span>
+                <span class="badge text-bg-light border" id="gps-status" title="GPS локација">📡 GPS се вклучува...</span>
+                <span class="small text-secondary ms-1">од {{ shift.working_start|date:"H:i" }}</span>
+                <div class="small mt-1">
+                    🚗 {{ shift.vehicle_ownership.plate }} · {{ shift.vehicle_ownership.vehicle_type.description }}
+                    · 📍 {{ shift.current_location.ulica }}, {{ shift.current_location.naselba }}
+                </div>
+            </div>
+            {% if not ride %}
+                <form method="post" action="{% url 'driver_action' %}"
+                      onsubmit="return confirm('Да ја завршам смената?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="end_shift">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Заврши смена</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if ride %}
+        {# ---------- Активно возење ---------- #}
+        <div class="card border-0 shadow-sm mb-3 border-start border-4 border-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <h2 class="h5">{{ status_label }}</h2>
+                    <span class="text-secondary small">Возење #{{ ride.ride_id }}</span>
+                </div>
+                <ul class="list-unstyled mb-3">
+                    <li class="mb-1">👤 <strong>{{ ride.user_name }}</strong> · {{ ride.user_phone }}</li>
+                    <li class="mb-1">🟢 {{ ride.pickup_ulica }} {{ ride.pickup_broj }}, {{ ride.pickup_naselba }}</li>
+                    <li class="mb-1">🔴 {{ ride.dropoff_ulica }} {{ ride.dropoff_broj }}, {{ ride.dropoff_naselba }}</li>
+                    <li>📏 {{ ride.distance_km }} km</li>
+                </ul>
+                {% if ride.ride_status == 'in_progress' %}
+                    {% include 'GEOCAB_APP/partials/route_map.html' with pickup_lat=ride.pickup_lat pickup_lng=ride.pickup_lng dropoff_lat=ride.dropoff_lat dropoff_lng=ride.dropoff_lng target='dropoff' show_nav=True %}
+                {% else %}
+                    {% include 'GEOCAB_APP/partials/route_map.html' with pickup_lat=ride.pickup_lat pickup_lng=ride.pickup_lng dropoff_lat=ride.dropoff_lat dropoff_lng=ride.dropoff_lng target='pickup' show_nav=True %}
+                {% endif %}
+                {% if next_action %}
+                    <form method="post" action="{% url 'driver_action' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="{{ next_action.0 }}">
+                        <input type="hidden" name="ride_id" value="{{ ride.ride_id }}">
+                        <button type="submit" class="btn btn-primary btn-lg w-100">{{ next_action.1 }}</button>
+                    </form>
+                {% endif %}
+                {% include 'GEOCAB_APP/partials/report_problem.html' %}
+                {% if ride.ride_status != 'in_progress' %}
+                    <div class="d-flex gap-2 mt-2">
+                        <form method="post" action="{% url 'driver_action' %}" class="flex-fill"
+                              onsubmit="return confirm('Да се откажам? Возењето ќе оди кај друг возач.');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="cancel">
+                            <input type="hidden" name="ride_id" value="{{ ride.ride_id }}">
+                            <button type="submit" class="btn btn-outline-secondary w-100">Откажи се</button>
+                        </form>
+                        {% if ride.ride_status == 'driver_arrived' %}
+                            <form method="post" action="{% url 'driver_action' %}" class="flex-fill"
+                                  onsubmit="return confirm('Корисникот не се појави? Ќе плати цела почетна цена.');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="no_show">
+                                <input type="hidden" name="ride_id" value="{{ ride.ride_id }}">
+                                <button type="submit" class="btn btn-outline-danger w-100">Корисникот не дојде</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+    {% elif offer %}
+        {# ---------- Нова понуда ---------- #}
+        <div class="card border-0 shadow mb-3 border-start border-4 border-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h2 class="h5 mb-0">🔔 Нова понуда</h2>
+                    <span class="badge text-bg-warning fs-6" title="Време за одговор">⏱ <span id="countdown" data-seconds="{{ seconds_left }}"></span></span>
+                </div>
+                <ul class="list-unstyled mb-3">
+                    <li class="mb-1">👤 {{ offer.user_name }}{% if offer.user_avg_given_score %} · дава просечно ⭐ {{ offer.user_avg_given_score }}{% endif %}</li>
+                    <li class="mb-1">🟢 {{ offer.pickup_address }} <span class="text-secondary small">({{ offer.meters_to_pickup|floatformat:0 }} m од вас)</span></li>
+                    <li class="mb-1">🔴 {{ offer.dropoff_address }}</li>
+                    <li>📏 {{ offer.distance_km }} km · 💰 <strong>{{ offer.estimated_price }} ден.</strong></li>
+                </ul>
+                {% include 'GEOCAB_APP/partials/route_map.html' with pickup_lat=offer.pickup_lat pickup_lng=offer.pickup_lng dropoff_lat=offer_dropoff.latitude dropoff_lng=offer_dropoff.longitude target='pickup' show_nav=False %}
+                <div class="d-flex gap-2">
+                    <form method="post" action="{% url 'driver_action' %}" class="flex-fill">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="accept">
+                        <input type="hidden" name="ride_id" value="{{ offer.ride_id }}">
+                        <button type="submit" class="btn btn-success btn-lg w-100">Прифати</button>
+                    </form>
+                    <form method="post" action="{% url 'driver_action' %}" class="flex-fill">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reject">
+                        <input type="hidden" name="ride_id" value="{{ offer.ride_id }}">
+                        <button type="submit" class="btn btn-outline-danger btn-lg w-100">Одбиј</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    {% else %}
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body text-center py-4">
+                <div class="spinner-grow text-success mb-2" role="status"></div>
+                <div class="fw-semibold">Слободни сте. Чекате понуди...</div>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if not ride %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <a class="small" data-bs-toggle="collapse" href="#location-panel">📍 Промени ја мојата локација</a>
+                <div class="collapse" id="location-panel">
+                    <form method="post" action="{% url 'driver_action' %}" class="mt-3" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_location">
+                        {{ form.loc_lat }}{{ form.loc_lng }}
+                        {% include 'GEOCAB_APP/partials/driver_location.html' %}
+                        <button type="submit" class="btn btn-dark w-100 mt-2">Зачувај локација</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endif %}
+
+<p class="small text-secondary text-center mt-3">Страницата се освежува автоматски.</p>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static_v 'GEOCAB_APP/geocab_map.js' %}"></script>
+<script>
+(function () {
+    // Мапа за локација (почеток на смена или промена на локација)
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        const map = GeocabMap.create('map');
+        const point = GeocabMap.pointPicker(map, 'loc', '#0d6efd');
+        map.on('click', e => point.set(e.latlng, true));
+        window.addEventListener('gc:use-location', e => { point.set(e.detail, true); map.setView(e.detail, 16); });
+        const panel = document.getElementById('location-panel');
+        if (panel) panel.addEventListener('shown.bs.collapse', () => map.invalidateSize());
+    }
+
+    // ---------- GPS: позицијата се праќа додека возачот е на смена ----------
+    const gpsBadge = document.getElementById('gps-status');
+    let lastSent = null, lastSentAt = 0;
+    function setGps(text, cls) { if (gpsBadge) { gpsBadge.textContent = text; gpsBadge.className = 'badge ' + cls; } }
+    function distanceM(a, b) { return L.latLng(a.lat, a.lng).distanceTo(L.latLng(b.lat, b.lng)); }
+    async function sendPosition(pos) {
+        const p = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+        window.dispatchEvent(new CustomEvent('gc:position', {detail: p}));
+        setGps(`📡 GPS активен · ±${Math.round(pos.coords.accuracy)} m`, 'text-bg-success');
+        const now = Date.now();
+        if (lastSent && now - lastSentAt < 8000 && distanceM(lastSent, p) < 30) return;
+        lastSent = p; lastSentAt = now;
+        const body = new URLSearchParams({lat: p.lat.toFixed(6), lng: p.lng.toFixed(6), csrfmiddlewaretoken: '{{ csrf_token }}'});
+        try { await fetch('{% url "driver_position" %}', {method: 'POST', body}); } catch (e) {}
+    }
+    {% if shift %}
+    if (!('geolocation' in navigator)) setGps('📡 GPS не е поддржан', 'text-bg-secondary');
+    else if (!window.isSecureContext) setGps('📡 GPS бара https:// (локацијата се менува рачно)', 'text-bg-warning');
+    else navigator.geolocation.watchPosition(sendPosition, err => {
+        setGps(err.code === 1 ? '📡 GPS не е дозволен (дозволете локација во прелистувачот)' : '📡 GPS недостапен', 'text-bg-warning');
+    }, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000});
+    {% endif %}
+
+    // „Користи моја локација“ при почеток на смена / промена на локација
+    document.querySelectorAll('.use-my-location').forEach(btn => btn.addEventListener('click', () => {
+        if (!navigator.geolocation || !window.isSecureContext) { alert('GPS не е достапен тука - кликнете на мапата.'); return; }
+        btn.disabled = true; btn.textContent = '📍 Барам...';
+        navigator.geolocation.getCurrentPosition(pos => {
+            window.dispatchEvent(new CustomEvent('gc:use-location', {detail: L.latLng(pos.coords.latitude, pos.coords.longitude)}));
+            btn.disabled = false; btn.textContent = '📍 Користи моја локација';
+        }, () => { alert('Не може да се добие локацијата. Кликнете на мапата.'); btn.disabled = false; btn.textContent = '📍 Користи моја локација'; },
+           {enableHighAccuracy: true, timeout: 15000});
+    }));
+
+    // ---------- Мапа со пат (понуда / возење) ----------
+    const routeEl = document.getElementById('route-map');
+    if (routeEl) {
+        const parse = v => { const [lat, lng] = v.split(',').map(parseFloat); return isNaN(lat) ? null : L.latLng(lat, lng); };
+        const pickup = parse(routeEl.dataset.pickup), dropoff = parse(routeEl.dataset.dropoff);
+        let driver = parse(routeEl.dataset.driver);
+        const rmap = GeocabMap.create('route-map');
+        L.marker(pickup, {icon: GeocabMap.icon('#198754'), title: 'Корисник'}).addTo(rmap).bindTooltip('🟢 Корисник');
+        if (dropoff) L.marker(dropoff, {icon: GeocabMap.icon('#dc3545'), title: 'Дестинација'}).addTo(rmap).bindTooltip('🔴 Дестинација');
+        const car = driver ? L.marker(driver, {icon: GeocabMap.carIcon(), zIndexOffset: 1000}).addTo(rmap) : null;
+        let line = null, lastRouteAt = 0;
+        GeocabMap.fit(rmap, [pickup, dropoff, driver]);
+
+        const toPickup = routeEl.dataset.target !== 'dropoff';
+        // Google Maps: возачот → корисникот → дестинацијата (по подигање: возачот → дестинацијата)
+        // Waze прима само една дестинација, затоа има посебно копче за секоја точка
+        function updateNavLinks() {
+            const google = document.getElementById('nav-google');
+            if (google) google.href = toPickup ? GeocabMap.googleMapsLink(driver, dropoff, [pickup]) : GeocabMap.googleMapsLink(driver, dropoff);
+            const wazePickup = document.getElementById('nav-waze-pickup'), wazeDropoff = document.getElementById('nav-waze-dropoff');
+            if (wazePickup) wazePickup.href = GeocabMap.wazeLink(pickup, driver);
+            if (wazeDropoff) wazeDropoff.href = GeocabMap.wazeLink(dropoff, toPickup ? pickup : driver);
+        }
+        updateNavLinks();
+
+        let nextLeg = null;
+        async function drawRoute() {
+            lastRouteAt = Date.now();
+            const info = document.getElementById('route-info');
+            // без позиција на возачот: само патот на корисникот (подигање → дестинација)
+            const points = toPickup ? [driver, pickup, dropoff] : [driver || pickup, dropoff];
+            try {
+                const r = await GeocabMap.route(points.filter(Boolean));
+                [line, nextLeg].forEach(l => l && rmap.removeLayer(l));
+                const legs = r.legs;
+                const first = legs[0], second = legs[1];
+                line = L.polyline(first.coords, {color: '#0d6efd', weight: 5, opacity: .85}).addTo(rmap);
+                nextLeg = second ? L.polyline(second.coords, {color: '#198754', weight: 4, opacity: .8, dashArray: '8 8'}).addTo(rmap) : null;
+                if (toPickup && driver) {
+                    info.innerHTML = `🧭 До корисникот <strong>${GeocabMap.formatDistance(first.distance)}</strong> · ${GeocabMap.formatDuration(first.duration)}`
+                        + (second ? ` <span class="text-secondary">· потоа до дестинацијата ${GeocabMap.formatDistance(second.distance)} · ${GeocabMap.formatDuration(second.duration)}</span>` : '');
+                } else {
+                    info.innerHTML = `🧭 До дестинацијата <strong>${GeocabMap.formatDistance(first.distance)}</strong> · ${GeocabMap.formatDuration(first.duration)}`;
+                }
+                const list = document.getElementById('route-steps');
+                list.innerHTML = '';
+                r.steps.forEach(st => { const li = document.createElement('li'); li.textContent = `${st.text} (${GeocabMap.formatDistance(st.distance)})`; list.appendChild(li); });
+                document.getElementById('route-steps-box').hidden = !r.steps.length;
+            } catch (e) {
+                info.textContent = 'Патот не може да се пресмета (нема интернет?). Користете Google Maps / Waze.';
+            }
+        }
+        drawRoute();
+        // нова GPS позиција: помести го таксито и на 20 s пресметај го патот повторно
+        window.addEventListener('gc:position', e => {
+            driver = L.latLng(e.detail.lat, e.detail.lng);
+            if (car) car.setLatLng(driver);
+            updateNavLinks();
+            if (Date.now() - lastRouteAt > 20000) drawRoute();
+        });
+    }
+
+    // Одбројување за понудата
+    const countdown = document.getElementById('countdown');
+    if (countdown) {
+        let left = parseInt(countdown.dataset.seconds);
+        const show = () => countdown.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+        show();
+        setInterval(() => {
+            left = Math.max(0, left - 1);
+            show();
+            if (left === 0) location.reload();
+        }, 1000);
+    }
+
+    // Освежи кога ќе се смени смената, понудата или статусот на возењето
+    const current = JSON.stringify({
+        collect: {{ collect.ride.ride_id|default:'null' }},
+        shift: {{ shift|yesno:'true,false' }},
+        offer: {{ offer.ride_id|default:'null' }},
+        ride: {% if ride %}[{{ ride.ride_id }}, '{{ ride.ride_status }}']{% else %}null{% endif %}
+    });
+    setInterval(async () => {
+        // не прекинувај додека се менува локацијата или се пишува пријава
+        if (document.querySelector('#location-panel.show, .modal.show')) return;
+        try {
+            const data = await (await fetch('{% url "driver_status" %}')).json();
+            if (JSON.stringify(data) !== current) location.reload();
+        } catch (e) {}
+    }, 4000);
+})();
+</script>
+{% endblock %}

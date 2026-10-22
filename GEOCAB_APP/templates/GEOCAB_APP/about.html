@@ -1,0 +1,168 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load static %}
+
+{% block title %}За нас - GEOCAB{% endblock %}
+
+{% block page %}
+{# ---------- Наслов ---------- #}
+<section class="gc-hero">
+    <div class="container py-5">
+        <div class="row align-items-center g-4">
+            <div class="col-lg-7">
+                <div class="gc-eyebrow mb-2">За нас</div>
+                <h1 class="display-5 fw-bold">Луѓе што возат луѓе.</h1>
+                <p class="lead opacity-75 mb-0">
+                    GEOCAB е платформа од Скопје што ги поврзува патниците со возачи од нивната околина -
+                    едноставно, безбедно и по фер цена.
+                </p>
+            </div>
+            <div class="col-lg-5 text-center">
+                <img src="{% static 'GEOCAB_APP/img/team.svg' %}" alt="GEOCAB заедница" class="img-fluid gc-float rounded-4" style="max-width: 340px">
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Приказна ---------- #}
+<section class="gc-section">
+    <div class="container" style="max-width: 900px">
+        <div class="row g-5">
+            <div class="col-md-6 gc-reveal">
+                <h2 class="h4 fw-bold">Што е GEOCAB?</h2>
+                <p class="text-secondary">
+                    GEOCAB не е класична такси компанија. Ние сме <strong>платформа</strong>: секој што има автомобил
+                    и сака да вози може да се пријави кај нас. Ние ги проверуваме возачите и возилата, ги регистрираме
+                    во апликацијата и тие возат според нашите правила и цени.
+                </p>
+                <p class="text-secondary mb-0">
+                    Патникот ја избира рутата на мапа, ја гледа цената однапред и најблискиот слободен возач
+                    го добива барањето за неколку секунди.
+                </p>
+            </div>
+            <div class="col-md-6 gc-reveal">
+                <h2 class="h4 fw-bold">Нашите вредности</h2>
+                <ul class="list-unstyled text-secondary mb-0">
+                    <li class="mb-3">🤝 <strong class="text-body">Фер за сите</strong> - патникот ја знае цената однапред, а возачот добива {{ driver_share|floatformat:0 }}% од секое возење.</li>
+                    <li class="mb-3">🛡️ <strong class="text-body">Безбедност</strong> - секој возач лично го регистрира нашиот тим, а оценките на патниците се јавни.</li>
+                    <li class="mb-3">💵 <strong class="text-body">Едноставно плаќање</strong> - само готовина, директно на возачот, без картички и скриени трошоци.</li>
+                    <li>📍 <strong class="text-body">Локално</strong> - од Скопје, за Скопје.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Бројки ---------- #}
+<section class="gc-section-navy py-4">
+    <div class="container">
+        <div class="row text-center g-3">
+            <div class="col-6 col-md-3"><div class="gc-stat">{{ stats.drivers }}</div><div class="small opacity-75">активни возачи</div></div>
+            <div class="col-6 col-md-3"><div class="gc-stat">{{ stats.rides }}</div><div class="small opacity-75">завршени возења</div></div>
+            <div class="col-6 col-md-3"><div class="gc-stat">{{ stats.users }}</div><div class="small opacity-75">корисници</div></div>
+            <div class="col-6 col-md-3"><div class="gc-stat">{{ driver_share|floatformat:0 }}%</div><div class="small opacity-75">за возачот</div></div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Стани возач ---------- #}
+<section class="gc-section gc-section-yellow" id="vozaci">
+    <div class="container" style="max-width: 900px">
+        <div class="text-center mb-5 gc-reveal">
+            <div class="gc-eyebrow">За возачи</div>
+            <h2 class="fw-bold">Како да станете GEOCAB возач</h2>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-6 col-lg-3 gc-reveal">
+                <div class="gc-step"><div class="gc-step-num">1</div>
+                    <h3 class="h6">Јавете се</h3>
+                    <p class="small text-secondary">Пишете ни на <a href="mailto:{{ contact.email_drivers }}">{{ contact.email_drivers }}</a> или јавете се на {{ contact.phone_mobile }}.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3 gc-reveal">
+                <div class="gc-step"><div class="gc-step-num">2</div>
+                    <h3 class="h6">Донесете документи</h3>
+                    <p class="small text-secondary">Лична карта, возачка дозвола и сообраќајна дозвола за возилото.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3 gc-reveal">
+                <div class="gc-step"><div class="gc-step-num">3</div>
+                    <h3 class="h6">Ве регистрираме</h3>
+                    <p class="small text-secondary">Нашиот администратор ве внесува во апликацијата и ви дава корисничко име и лозинка.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3 gc-reveal">
+                <div class="gc-step"><div class="gc-step-num">4</div>
+                    <h3 class="h6">Возите и заработувате</h3>
+                    <p class="small text-secondary">Почнувате смена кога сакате. {{ driver_share|floatformat:0 }}% од секое возење е ваше, а провизијата ја уплаќате кај нас.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Контакт ---------- #}
+<section class="gc-section">
+    <div class="container">
+        <div class="text-center mb-5 gc-reveal">
+            <div class="gc-eyebrow">Контакт</div>
+            <h2 class="fw-bold">Тука сме за вас</h2>
+        </div>
+        <div class="row g-4">
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <a href="tel:{{ contact.phone|cut:' ' }}" class="card gc-lift shadow-sm h-100 text-decoration-none text-body"><div class="card-body text-center">
+                    <div class="gc-icon bg-warning-subtle mx-auto mb-3">📞</div>
+                    <h3 class="h6">Телефон</h3>
+                    <div>{{ contact.phone }}</div>
+                    <div class="small text-secondary">моб. {{ contact.phone_mobile }}</div>
+                </div></a>
+            </div>
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <a href="mailto:{{ contact.email }}" class="card gc-lift shadow-sm h-100 text-decoration-none text-body"><div class="card-body text-center">
+                    <div class="gc-icon bg-primary-subtle mx-auto mb-3">✉️</div>
+                    <h3 class="h6">Е-пошта</h3>
+                    <div>{{ contact.email }}</div>
+                    <div class="small text-secondary">за возачи: {{ contact.email_drivers }}</div>
+                </div></a>
+            </div>
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <div class="card gc-lift shadow-sm h-100"><div class="card-body text-center">
+                    <div class="gc-icon bg-success-subtle mx-auto mb-3">📍</div>
+                    <h3 class="h6">Канцеларија</h3>
+                    <div>{{ contact.address }}</div>
+                </div></div>
+            </div>
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <div class="card gc-lift shadow-sm h-100"><div class="card-body text-center">
+                    <div class="gc-icon bg-danger-subtle mx-auto mb-3">🕒</div>
+                    <h3 class="h6">Работно време</h3>
+                    <div>{{ contact.hours }}</div>
+                    <div class="small text-secondary">апликацијата работи 24/7</div>
+                </div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if not request.session.geocab %}
+<section class="gc-section gc-section-navy text-center">
+    <div class="container gc-reveal">
+        <h2 class="fw-bold mb-3">Пробајте го GEOCAB денес</h2>
+        <div class="d-flex flex-wrap gap-3 justify-content-center">
+            <a href="{% url 'register' %}" class="btn btn-gc btn-lg px-4">Регистрирај се</a>
+            <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg px-4">Најава</a>
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const observer = new IntersectionObserver(entries => entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); }
+    }), {threshold: 0.15});
+    document.querySelectorAll('.gc-reveal').forEach(el => observer.observe(el));
+})();
+</script>
+{% endblock %}

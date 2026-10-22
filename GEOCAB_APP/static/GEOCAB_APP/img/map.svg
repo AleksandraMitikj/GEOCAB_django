@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Мапа со рута">
+  <rect width="400" height="300" rx="24" fill="#eaf4ec"/>
+  <!-- паркови -->
+  <circle cx="80" cy="70" r="40" fill="#cfe8d3"/><circle cx="330" cy="230" r="50" fill="#cfe8d3"/>
+  <!-- река -->
+  <path d="M0 170 Q100 130 200 165 T400 150" stroke="#9fd3ff" stroke-width="22" fill="none" stroke-linecap="round"/>
+  <!-- улици -->
+  <g stroke="#ffffff" stroke-width="12" stroke-linecap="round" fill="none">
+    <path d="M40 0 V300"/><path d="M150 0 V300"/><path d="M270 0 V300"/><path d="M0 60 H400"/><path d="M0 245 H400"/><path d="M0 0 L400 300"/>
+  </g>
+  <!-- рута -->
+  <path class="route" d="M95 230 Q110 160 170 140 T300 70" stroke="#1b1f3b" stroke-width="6" fill="none" stroke-dasharray="12 10" stroke-linecap="round"/>
+  <!-- пинови -->
+  <g class="pin pin-a"><path d="M95 232 C75 205 70 192 70 180 A25 25 0 0 1 120 180 C120 192 115 205 95 232 Z" fill="#198754"/><circle cx="95" cy="180" r="9" fill="#fff"/></g>
+  <g class="pin pin-b"><path d="M300 72 C280 45 275 32 275 20 A25 25 0 0 1 325 20 C325 32 320 45 300 72 Z" fill="#dc3545"/><circle cx="300" cy="20" r="9" fill="#fff"/></g>
+  <!-- мало такси на рутата -->
+  <g transform="translate(176 120)"><rect x="-18" y="-8" width="36" height="16" rx="6" fill="#ffc107" stroke="#1b1f3b" stroke-width="2"/><rect x="-6" y="-14" width="12" height="6" rx="2" fill="#1b1f3b"/></g>
+</svg>

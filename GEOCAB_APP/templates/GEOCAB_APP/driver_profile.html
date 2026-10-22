@@ -1,0 +1,170 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Мој профил - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-9">
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h3 mb-0">{{ request.person.name }}</h1>
+        <div class="text-secondary small">
+            ⭐ {{ request.person.rating }} · возач од {{ request.person.registration_date|date:"d.m.Y" }}
+            · {{ request.person.phone }}
+        </div>
+    </div>
+    <a href="{% url 'driver_dashboard' %}" class="btn btn-outline-dark btn-sm">Моја смена</a>
+</div>
+
+{# ---------- Заработка ---------- #}
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100 text-bg-success">
+            <div class="card-body">
+                <div class="small opacity-75">Вкупно заработено (ваши {{ driver_share|floatformat:0 }}%)</div>
+                <div class="display-6 fw-bold">{{ summary.driver_earnings }} ден.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="small text-secondary">Овој месец</div>
+                <div class="fs-3 fw-semibold">{{ summary.earnings_this_month }} ден.</div>
+                <div class="small text-secondary">Денес: {{ summary.earnings_today }} ден.</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="small text-secondary">Завршени возења</div>
+                <div class="fs-3 fw-semibold">{{ summary.completed_rides }}</div>
+                <div class="small text-secondary">{{ summary.total_km }} km</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Поделба на наплатените пари</h2>
+        <table class="table table-sm mb-2">
+            <tr><td>Вкупно наплатено од корисници (готовина)</td><td class="text-end fw-semibold">{{ summary.total_collected }} ден.</td></tr>
+            <tr class="table-success"><td>Ваш дел ({{ driver_share|floatformat:0 }}%)</td><td class="text-end fw-semibold">{{ summary.driver_earnings }} ден.</td></tr>
+            <tr><td>Провизија за GEOCAB ({{ commission|floatformat:0 }}%)</td><td class="text-end">{{ summary.platform_commission }} ден.</td></tr>
+            {% if summary.cancellation_earnings %}
+                <tr><td class="text-secondary small">од тоа, ваш дел од казни за откажување</td><td class="text-end small text-secondary">{{ summary.cancellation_earnings }} ден.</td></tr>
+            {% endif %}
+            {% if summary.unpaid_amount %}
+                <tr><td class="text-secondary small">Уште ненаплатено</td><td class="text-end small text-secondary">{{ summary.unpaid_amount }} ден.</td></tr>
+            {% endif %}
+        </table>
+        <p class="small text-secondary mb-0">
+            Тековната провизија на платформата е <strong>{{ commission|floatformat:0 }}%</strong>.
+            Бидејќи плаќањето е во готовина, целиот износ е кај вас, а провизијата за GEOCAB ја уплаќате кај администраторот.
+        </p>
+    </div>
+</div>
+
+{% include 'GEOCAB_APP/partials/debt_banner.html' %}
+
+{# ---------- Долг кон GEOCAB ---------- #}
+<div class="card border-0 shadow-sm mb-4 {% if balance.balance > 0 %}border-start border-4 border-warning{% endif %}">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h2 class="h6 mb-0">Провизија за GEOCAB</h2>
+            {% if balance.balance > 0 %}
+                <span class="fs-5 fw-bold text-danger">Должите: {{ balance.balance }} ден.</span>
+            {% else %}
+                <span class="badge text-bg-success">✓ Немате долг</span>
+            {% endif %}
+        </div>
+        <div class="small text-secondary mt-1">
+            Вкупна провизија {{ balance.total_commission }} ден. · уплатено {{ balance.total_paid }} ден.
+            · Провизијата за секој месец се плаќа од 1 до 15 во следниот месец.
+            {% if balance.balance > 0 %}· Уплатете ја провизијата кај администраторот на GEOCAB.{% endif %}
+        </div>
+        {% if payouts %}
+            <table class="table table-sm small mt-3 mb-0">
+                <thead><tr class="text-secondary"><th>Уплатено на</th><th class="text-end">Износ</th><th>Забелешка</th></tr></thead>
+                <tbody>
+                {% for p in payouts %}
+                    <tr><td>{{ p.paid_at|date:"d.m.Y H:i" }}</td><td class="text-end">{{ p.amount }} ден.</td><td>{{ p.note|default:"" }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+</div>
+
+{# ---------- По ден ---------- #}
+{% if daily %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h2 class="h6 mb-3">По ден (последни 14 дена со возења)</h2>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr class="small text-secondary"><th>Датум</th><th class="text-end">Возења</th><th class="text-end">km</th><th class="text-end">Наплатено</th><th class="text-end">Ваш дел</th><th class="text-end">GEOCAB</th></tr></thead>
+                <tbody>
+                {% for d in daily %}
+                    <tr>
+                        <td>{{ d.ride_date|date:"d.m.Y" }}</td>
+                        <td class="text-end">{{ d.completed_rides }}</td>
+                        <td class="text-end">{{ d.total_km }}</td>
+                        <td class="text-end">{{ d.paid_amount }}</td>
+                        <td class="text-end fw-semibold">{{ d.driver_earnings }}</td>
+                        <td class="text-end text-secondary">{{ d.platform_commission }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ---------- Последни плаќања ---------- #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Последни плаќања</h2>
+        {% if payments %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr class="small text-secondary"><th>Време</th><th>Возење</th><th>Корисник</th><th class="text-end">Износ</th><th class="text-end">Ваш дел</th><th class="text-end">GEOCAB</th></tr></thead>
+                <tbody>
+                {% for p in payments %}
+                    <tr>
+                        <td class="small">{{ p.payment_time|date:"d.m H:i" }}</td>
+                        <td class="small">#{{ p.ride_id }}{% if p.ride.status.status_text == 'cancelled' %} <span class="badge text-bg-secondary">казна</span>{% endif %}</td>
+                        <td class="small">{{ p.ride.user.name }}</td>
+                        <td class="text-end">{{ p.amount }}</td>
+                        <td class="text-end fw-semibold">{{ p.driver_amount }}</td>
+                        <td class="text-end text-secondary">{{ p.platform_amount }} <span class="small">({{ p.commission_percentage|floatformat:0 }}%)</span></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <p class="text-secondary mb-0">Сè уште нема наплатени возења.</p>
+        {% endif %}
+    </div>
+</div>
+
+{# ---------- Возила ---------- #}
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Мои возила</h2>
+        {% for v in vehicles %}
+            <div class="small mb-1">🚗 <strong>{{ v.plate }}</strong> · {{ v.vehicle_type.description }} · {{ v.color }} · {{ v.year }}</div>
+        {% empty %}
+            <p class="text-secondary small mb-0">Немате доделено возило.</p>
+        {% endfor %}
+    </div>
+</div>
+
+</div>
+</div>
+{% endblock %}

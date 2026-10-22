@@ -1,0 +1,32 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Регистрација - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-1">Регистрација</h2>
+                <p class="text-secondary small mb-4">Креирајте профил за да барате возења.</p>
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+                    {% for field in form %}
+                        {% include 'GEOCAB_APP/partials/field.html' %}
+                    {% endfor %}
+                    <button type="submit" class="btn btn-dark w-100">Креирај профил</button>
+                </form>
+
+                <p class="text-center small mt-3 mb-0">
+                    Веќе имате профил? <a href="{% url 'login' %}">Најавете се</a>
+                </p>
+                <p class="text-center small text-secondary mt-2 mb-0">
+                    Возачите не се регистрираат сами - профил им креира администратор.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

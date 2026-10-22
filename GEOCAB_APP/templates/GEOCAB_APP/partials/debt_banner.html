@@ -1,0 +1,11 @@
+{# Лента за месечниот долг на возачот (debt = db.driver_debt_status) #}
+{% if debt.level %}
+    <div class="alert {% if debt.level == 'blocked' %}alert-danger{% elif debt.level == 'warning' %}alert-warning{% else %}alert-info{% endif %} d-flex gap-3 align-items-start">
+        <div class="fs-3 lh-1">{% if debt.level == 'blocked' %}🚫{% elif debt.level == 'warning' %}⚠️{% else %}ℹ️{% endif %}</div>
+        <div>
+            <div class="fw-semibold">{% if debt.level == 'blocked' %}Блокирани сте поради неплатен долг{% elif debt.level == 'warning' %}Опомена за неплатен долг{% else %}Рок за плаќање на провизијата{% endif %}</div>
+            <div class="small">{{ debt.message }}</div>
+            <div class="small mt-1">Уплата кај GEOCAB: {{ contact.address }} · {{ contact.hours }} · 📞 {{ contact.phone }}</div>
+        </div>
+    </div>
+{% endif %}

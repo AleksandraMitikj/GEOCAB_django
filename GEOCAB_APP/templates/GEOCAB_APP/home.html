@@ -1,0 +1,293 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load static %}
+
+{% block title %}GEOCAB - такси возења во Скопје{% endblock %}
+
+{% block page %}
+{# ---------- Херо ---------- #}
+<section class="gc-hero">
+    <div class="container gc-hero-content">
+        <div class="row align-items-center">
+            <div class="col-lg-7">
+                <div class="gc-eyebrow mb-2">Такси платформа · Скопје</div>
+                <h1 class="display-4 fw-bold mb-3">Возење низ градот,<br><span class="gc-highlight">со еден клик.</span></h1>
+                <p class="lead opacity-75 mb-4">
+                    Изберете од каде и до каде на мапата, видете ја цената однапред
+                    и најблискиот возач веднаш тргнува кон вас.
+                </p>
+
+                {% with role=request.session.geocab.role %}
+                <div class="d-flex flex-wrap gap-3 mb-4">
+                    {% if role == 'user' %}
+                        <a href="{% url 'ride_new' %}" class="btn btn-gc btn-lg px-4">Побарај возење</a>
+                        <a href="{% url 'ride_current' %}" class="btn btn-outline-light btn-lg px-4">Моето возење</a>
+                    {% elif role == 'driver' %}
+                        <a href="{% url 'driver_dashboard' %}" class="btn btn-gc btn-lg px-4">Моја смена</a>
+                        <a href="{% url 'driver_profile' %}" class="btn btn-outline-light btn-lg px-4">Мој профил</a>
+                    {% elif role == 'admin' %}
+                        <a href="{% url 'manage_dashboard' %}" class="btn btn-gc btn-lg px-4">Админ панел</a>
+                    {% else %}
+                        <a href="{% url 'register' %}" class="btn btn-gc btn-lg px-4">Започни - бесплатно</a>
+                        <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg px-4">Најава</a>
+                    {% endif %}
+                </div>
+                {% endwith %}
+
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="badge rounded-pill text-bg-light py-2 px-3">💵 Плаќање само во готовина</span>
+                    <span class="badge rounded-pill text-bg-light py-2 px-3">📍 Најблизок возач</span>
+                    <span class="badge rounded-pill text-bg-light py-2 px-3">⭐ Оценети возачи</span>
+                </div>
+            </div>
+            <div class="col-lg-5 d-none d-lg-block text-center">
+                <img src="{% static 'GEOCAB_APP/img/map.svg' %}" alt="Мапа со рута" class="img-fluid gc-float" style="max-width: 380px">
+            </div>
+        </div>
+    </div>
+    <img src="{% static 'GEOCAB_APP/img/city.svg' %}" alt="" class="gc-city">
+    <div class="gc-taxi"><img src="{% static 'GEOCAB_APP/img/taxi.svg' %}" alt="GEOCAB такси" class="gc-taxi-bounce w-100"></div>
+</section>
+
+{# ---------- Бројки ---------- #}
+<section class="gc-section-navy py-4">
+    <div class="container">
+        <div class="row text-center g-3">
+            <div class="col-6 col-md-3"><div class="gc-stat" data-count="{{ stats.drivers }}">0</div><div class="small opacity-75">активни возачи</div></div>
+            <div class="col-6 col-md-3"><div class="gc-stat" data-count="{{ stats.rides }}">0</div><div class="small opacity-75">завршени возења</div></div>
+            <div class="col-6 col-md-3"><div class="gc-stat" data-count="{{ stats.users }}">0</div><div class="small opacity-75">корисници</div></div>
+            <div class="col-6 col-md-3"><div class="gc-stat" data-count="{{ stats.rating|floatformat:1 }}" data-decimals="1">0</div><div class="small opacity-75">просечна оценка ⭐</div></div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Како функционира ---------- #}
+<section class="gc-section">
+    <div class="container">
+        <div class="text-center mb-5 gc-reveal">
+            <div class="gc-eyebrow">Како функционира</div>
+            <h2 class="fw-bold">Три чекори до вашата дестинација</h2>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-4 gc-reveal">
+                <div class="gc-step">
+                    <div class="gc-step-num">1</div>
+                    <h3 class="h5">Изберете на мапа</h3>
+                    <p class="text-secondary">Кликнете од каде тргнувате и каде одите. Адресата се пополнува сама.</p>
+                </div>
+            </div>
+            <div class="col-md-4 gc-reveal">
+                <div class="gc-step">
+                    <div class="gc-step-num">2</div>
+                    <h3 class="h5">Видете ја цената</h3>
+                    <p class="text-secondary">Пред да побарате, ја гледате цената за секоја класа возило. Без изненадувања.</p>
+                </div>
+            </div>
+            <div class="col-md-4 gc-reveal">
+                <div class="gc-step">
+                    <div class="gc-step-num">3</div>
+                    <h3 class="h5">Возете се и платете</h3>
+                    <p class="text-secondary">Следете го возачот во живо, а на крајот платете во готовина и оценете го.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Калкулатор на цена ---------- #}
+{% if prices %}
+<section class="gc-section gc-section-yellow">
+    <div class="container">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-5 gc-reveal">
+                <div class="gc-eyebrow">Фер цени</div>
+                <h2 class="fw-bold">Колку чини едно возење?</h2>
+                <p class="text-secondary">
+                    Поместете го лизгачот и видете ја цената веднаш. Цената е почетна такса плус цена по километар,
+                    а за возења <strong>над 10 km добивате 20% попуст</strong>.
+                </p>
+                <p class="small text-secondary mb-0">Ова е проценка. Точната цена се пресметува на крајот на возењето.</p>
+            </div>
+            <div class="col-lg-7 gc-reveal">
+                <div class="card shadow gc-calc">
+                    <div class="card-body p-4">
+                        <label for="km" class="form-label d-flex justify-content-between">
+                            <span class="fw-semibold">Растојание</span>
+                            <span><strong id="km-value">5</strong> km</span>
+                        </label>
+                        <input type="range" class="form-range" id="km" min="1" max="30" step="0.5" value="5">
+                        <div class="d-flex justify-content-between small text-secondary mb-4"><span>1 km</span><span>Центар → Аеродром ≈ 6 km</span><span>30 km</span></div>
+
+                        <div class="row g-3">
+                            {% for p in prices %}
+                                <div class="col-sm-6">
+                                    <div class="border rounded-4 p-3 h-100 {% if forloop.first %}border-warning bg-warning-subtle{% endif %}">
+                                        <div class="small text-secondary">{{ p.name }}</div>
+                                        <div class="gc-price" data-base="{{ p.base|stringformat:'s' }}" data-per-km="{{ p.per_km|stringformat:'s' }}">—</div>
+                                        <div class="small text-secondary">{{ p.base|floatformat:0 }} ден. + {{ p.per_km|floatformat:0 }} ден./km</div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="alert alert-success small mt-3 mb-0 py-2" id="discount-note" hidden>🎉 Над 10 km: пресметан е попуст од 20%!</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ---------- Зошто GEOCAB ---------- #}
+<section class="gc-section">
+    <div class="container">
+        <div class="text-center mb-5 gc-reveal">
+            <div class="gc-eyebrow">Зошто GEOCAB</div>
+            <h2 class="fw-bold">Сè што ви треба за возење без стрес</h2>
+        </div>
+        <div class="row g-4">
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <div class="card gc-lift shadow-sm h-100"><div class="card-body">
+                    <div class="gc-icon bg-warning-subtle mb-3">📍</div>
+                    <h3 class="h6">Најблизок возач</h3>
+                    <p class="small text-secondary mb-0">Системот автоматски го наоѓа најблискиот слободен возач во радиус од 10 km.</p>
+                </div></div>
+            </div>
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <div class="card gc-lift shadow-sm h-100"><div class="card-body">
+                    <div class="gc-icon bg-success-subtle mb-3">💵</div>
+                    <h3 class="h6">Само готовина</h3>
+                    <p class="small text-secondary mb-0">Плаќате во готовина директно на возачот. Без картички, без внесување сметки и без скриени трошоци.</p>
+                </div></div>
+            </div>
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <div class="card gc-lift shadow-sm h-100"><div class="card-body">
+                    <div class="gc-icon bg-primary-subtle mb-3">🔔</div>
+                    <h3 class="h6">Следење во живо</h3>
+                    <p class="small text-secondary mb-0">Секој чекор го гледате веднаш: возачот прифати, пристигна, возењето почна.</p>
+                </div></div>
+            </div>
+            <div class="col-sm-6 col-lg-3 gc-reveal">
+                <div class="card gc-lift shadow-sm h-100"><div class="card-body">
+                    <div class="gc-icon bg-danger-subtle mb-3">⭐</div>
+                    <h3 class="h6">Оценети возачи</h3>
+                    <p class="small text-secondary mb-0">По секое возење ја давате вашата оценка. Сите возачи ги проверува и регистрира нашиот тим.</p>
+                </div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Стани возач ---------- #}
+<section class="gc-section gc-section-navy">
+    <div class="container">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-5 text-center gc-reveal">
+                <img src="{% static 'GEOCAB_APP/img/driver.svg' %}" alt="Возач" class="img-fluid gc-float" style="max-width: 340px">
+            </div>
+            <div class="col-lg-7 gc-reveal">
+                <div class="gc-eyebrow">За возачи</div>
+                <h2 class="fw-bold">Имате автомобил? Возете со GEOCAB.</h2>
+                <p class="opacity-75">
+                    Не треба да сте во такси компанија. Пријавете се кај нас, ние ве регистрираме
+                    и возите кога вам ви одговара, според нашите правила и цени.
+                </p>
+                <div class="row g-3 my-3">
+                    <div class="col-sm-4"><div class="gc-stat">{{ driver_share|floatformat:0 }}%</div><div class="small opacity-75">од секое возење е ваше</div></div>
+                    <div class="col-sm-4"><div class="gc-stat">0 ден.</div><div class="small opacity-75">членарина</div></div>
+                    <div class="col-sm-4"><div class="gc-stat">24/7</div><div class="small opacity-75">возите кога сакате</div></div>
+                </div>
+                <a href="{% url 'about' %}#vozaci" class="btn btn-gc btn-lg">Како да станам возач →</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Прашања ---------- #}
+<section class="gc-section">
+    <div class="container" style="max-width: 820px">
+        <div class="text-center mb-4 gc-reveal">
+            <div class="gc-eyebrow">Прашања</div>
+            <h2 class="fw-bold">Често поставувани прашања</h2>
+        </div>
+        <div class="accordion gc-reveal" id="faq">
+            <div class="accordion-item">
+                <h3 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">Како плаќам?</button></h3>
+                <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faq"><div class="accordion-body">
+                    Само во <strong>готовина</strong>, директно на возачот на крајот на возењето. Возачот го потврдува плаќањето во апликацијата и веднаш добивате известување.
+                </div></div>
+            </div>
+            <div class="accordion-item">
+                <h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">Дали ја знам цената однапред?</button></h3>
+                <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faq"><div class="accordion-body">
+                    Да. Пред да побарате возење ја гледате проценетата цена за секоја класа возило. Над 10 km автоматски добивате 20% попуст.
+                </div></div>
+            </div>
+            <div class="accordion-item">
+                <h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">Можам ли да откажам?</button></h3>
+                <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faq"><div class="accordion-body">
+                    Да. Додека се бара возач, откажувањето е бесплатно. Ако возачот веќе прифатил, казната е половина од почетната цена, а ако веќе пристигнал - цела почетна цена.
+                </div></div>
+            </div>
+            <div class="accordion-item">
+                <h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">Што ако нема слободен возач?</button></h3>
+                <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faq"><div class="accordion-body">
+                    Ве известуваме веднаш и не плаќате ништо. Обидете се повторно за неколку минути.
+                </div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- Повик ---------- #}
+{% if not request.session.geocab %}
+<section class="gc-section gc-section-yellow text-center">
+    <div class="container gc-reveal">
+        <h2 class="fw-bold mb-3">Подготвени за првото возење?</h2>
+        <p class="text-secondary mb-4">Регистрацијата трае помалку од минута.</p>
+        <a href="{% url 'register' %}" class="btn btn-dark btn-lg px-5">Регистрирај се</a>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    // Калкулатор - иста формула како fn_price_formula во базата
+    const slider = document.getElementById('km');
+    if (slider) {
+        const kmValue = document.getElementById('km-value'), note = document.getElementById('discount-note');
+        function update() {
+            const km = parseFloat(slider.value);
+            kmValue.textContent = km.toString().replace('.', ',');
+            note.hidden = km < 10;
+            document.querySelectorAll('.gc-price').forEach(el => {
+                const base = parseFloat(el.dataset.base), perKm = parseFloat(el.dataset.perKm);
+                const price = (base + km * perKm) * (km >= 10 ? 0.8 : 1);
+                el.textContent = price.toFixed(0) + ' ден.';
+                el.classList.add('bump'); setTimeout(() => el.classList.remove('bump'), 150);
+            });
+        }
+        slider.addEventListener('input', update);
+        update();
+    }
+
+    // Бројки што се зголемуваат и секции што се појавуваат при скролање
+    function countUp(el) {
+        const target = parseFloat(el.dataset.count.replace(',', '.')) || 0, decimals = parseInt(el.dataset.decimals || 0);
+        const start = performance.now();
+        (function step(now) {
+            const t = Math.min(1, (now - start) / 1200);
+            el.textContent = (target * (1 - Math.pow(1 - t, 3))).toFixed(decimals).replace('.', ',');
+            if (t < 1) requestAnimationFrame(step);
+        })(start);
+    }
+    const observer = new IntersectionObserver(entries => entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        if (e.target.dataset.count !== undefined) countUp(e.target); else e.target.classList.add('visible');
+        observer.unobserve(e.target);
+    }), {threshold: 0.15});
+    document.querySelectorAll('.gc-reveal, [data-count]').forEach(el => observer.observe(el));
+})();
+</script>
+{% endblock %}

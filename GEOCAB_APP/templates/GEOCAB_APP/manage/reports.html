@@ -1,0 +1,47 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load geocab %}
+
+{% block title %}Пријави - GEOCAB{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Пријави на проблем</h1>
+<div class="d-flex gap-1 mb-3">
+    <a href="?status=open" class="btn btn-sm {% if status == 'open' %}btn-danger{% else %}btn-outline-danger{% endif %}">Отворени</a>
+    <a href="?status=all" class="btn btn-sm {% if status != 'open' %}btn-dark{% else %}btn-outline-dark{% endif %}">Сите</a>
+</div>
+
+{% for r in reports %}
+    <div class="card border-0 shadow-sm mb-3 {% if r.report_status == 'open' %}border-start border-4 {% if r.category == 'SAFETY' %}border-danger{% else %}border-warning{% endif %}{% endif %}">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+                <div>
+                    <strong>{{ r.category_label }}</strong>
+                    {% if r.report_status == 'open' %}<span class="badge text-bg-danger ms-1">отворена</span>{% else %}<span class="badge text-bg-success ms-1">решена</span>{% endif %}
+                    <div class="small text-secondary">
+                        #{{ r.report_id }} · {{ r.created_at|date:"d.m.Y H:i" }} · пријавил
+                        <strong>{{ r.reporter_name }}</strong> ({% if r.reported_by_type == 'DRIVER' %}возач{% else %}корисник{% endif %}, 📞 <a href="tel:{{ r.reporter_phone }}">{{ r.reporter_phone }}</a>)
+                    </div>
+                </div>
+                <a href="{% url 'manage_ride' r.ride_id %}" class="small text-nowrap">Возење #{{ r.ride_id }} ({{ r.ride_status|ride_status }}) →</a>
+            </div>
+            <p class="my-2">„{{ r.message }}“</p>
+            <div class="small text-secondary">Корисник: {{ r.user_name }} · Возач: {{ r.driver_name|default:"—" }}{% if r.vehicle_plate %} · {{ r.vehicle_plate }}{% endif %}</div>
+
+            {% if r.report_status == 'open' %}
+                <form method="post" action="{% url 'manage_report_resolve' r.report_id %}" class="d-flex flex-wrap gap-2 mt-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <input type="text" name="note" maxlength="1000" class="form-control form-control-sm flex-grow-1 w-auto" placeholder="Што е направено (го гледа и пријавувачот)">
+                    <button class="btn btn-success btn-sm">✓ Решено</button>
+                </form>
+            {% else %}
+                <div class="small text-success mt-2">✓ Решил {{ r.resolved_by }} на {{ r.resolved_at|date:"d.m.Y H:i" }}{% if r.admin_note %}: „{{ r.admin_note }}“{% endif %}</div>
+            {% endif %}
+        </div>
+    </div>
+{% empty %}
+    <div class="card border-0 shadow-sm"><div class="card-body text-center text-secondary py-5">
+        {% if status == 'open' %}Нема отворени пријави. ✓{% else %}Нема пријави.{% endif %}
+    </div></div>
+{% endfor %}
+{% endblock %}

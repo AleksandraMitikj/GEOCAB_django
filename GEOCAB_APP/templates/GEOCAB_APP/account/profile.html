@@ -1,0 +1,23 @@
+{% extends 'GEOCAB_APP/account/_card.html' %}
+{% block title %}Мои податоци - GEOCAB{% endblock %}
+{% block card %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h1 class="h4 mb-0">Мои податоци</h1>
+        <div class="small text-secondary">{{ role_label }} · корисничко име <strong>{{ person.username }}</strong></div>
+    </div>
+    <a href="{% url 'change_password' %}" class="btn btn-outline-dark btn-sm">🔑 Лозинка</a>
+</div>
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+    {% for field in form %}{% include 'GEOCAB_APP/partials/field.html' %}{% endfor %}
+    <button type="submit" class="btn btn-dark w-100">Зачувај</button>
+</form>
+{% if request.role == 'driver' %}
+    <div class="small text-secondary mt-3">
+        Име: <strong>{{ person.name }}</strong> · возачка дозвола: <strong>{{ person.license_number }}</strong><br>
+        Овие податоци ги менува администраторот на GEOCAB (се проверуваат документи).
+    </div>
+{% endif %}
+{% endblock %}

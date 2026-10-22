@@ -1,0 +1,129 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load geocab %}
+
+{% block title %}Dashboard - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h3 mb-0">Dashboard</h1>
+    <a href="{% url 'manage_driver_new' %}" class="btn btn-dark">+ Нов возач</a>
+</div>
+
+{% if open_reports %}
+    <a href="{% url 'manage_reports' %}" class="alert alert-danger d-flex justify-content-between align-items-center text-decoration-none">
+        <span>⚠️ <strong>{{ open_reports|length }}</strong> отворени пријави на проблем{% for r in open_reports %}{% if r.category == 'SAFETY' %} · има пријава за безбедност!{% endif %}{% endfor %}</span>
+        <span>Погледни →</span>
+    </a>
+{% endif %}
+
+{# ---------- Моментално ---------- #}
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <div class="small text-secondary">Возачи на смена</div>
+            <div class="fs-3 fw-semibold">{{ on_shift }}</div>
+            <div class="small text-secondary">{{ available }} слободни</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <div class="small text-secondary">Возења во тек</div>
+            <div class="fs-3 fw-semibold">{{ active_rides }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100 text-bg-success"><div class="card-body">
+            <div class="small opacity-75">Приход GEOCAB (овој месец)</div>
+            <div class="fs-3 fw-semibold">{{ money.platform }} ден.</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100 {% if outstanding %}text-bg-warning{% endif %}"><div class="card-body">
+            <div class="small opacity-75">Возачите должат провизија</div>
+            <div class="fs-3 fw-semibold">{{ outstanding }} ден.</div>
+            {% if blocked_for_debt or warned_for_debt %}<div class="small">🚫 {{ blocked_for_debt }} блокирани · ⚠️ {{ warned_for_debt }} со опомена</div>{% endif %}
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    {# ---------- Возења ---------- #}
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <h2 class="h6 mb-3">Возења</h2>
+            <table class="table table-sm mb-0">
+                <thead><tr class="small text-secondary"><th></th><th class="text-end">Денес</th><th class="text-end">Овој месец</th></tr></thead>
+                <tbody>
+                    <tr><td>Вкупно барања</td><td class="text-end">{{ today.total_rides }}</td><td class="text-end">{{ month.total_rides }}</td></tr>
+                    <tr><td>✅ Завршени</td><td class="text-end">{{ today.completed_rides }}</td><td class="text-end">{{ month.completed_rides }}</td></tr>
+                    <tr><td>❌ Откажани</td><td class="text-end">{{ today.cancelled_rides }}</td><td class="text-end">{{ month.cancelled_rides }}</td></tr>
+                    <tr><td>⚠️ Немаше возач</td><td class="text-end">{{ today.no_driver_rides }}</td><td class="text-end">{{ month.no_driver_rides }}</td></tr>
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    {# ---------- Пари ---------- #}
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <h2 class="h6 mb-3">Пари (овој месец)</h2>
+            <table class="table table-sm mb-2">
+                <tr><td>Наплатено од корисници</td><td class="text-end fw-semibold">{{ money.collected }} ден.</td></tr>
+                <tr><td>Дел на возачите</td><td class="text-end">{{ money.drivers }} ден.</td></tr>
+                <tr class="table-success"><td>Провизија за GEOCAB</td><td class="text-end fw-semibold">{{ money.platform }} ден.</td></tr>
+                <tr><td class="small text-secondary">Денес: приход GEOCAB</td><td class="text-end small text-secondary">{{ today.platform_revenue }} ден.</td></tr>
+            </table>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    {# ---------- Должници ---------- #}
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <div class="d-flex justify-content-between">
+                <h2 class="h6 mb-3">Најголеми должници</h2>
+                <a href="{% url 'manage_drivers' %}?debt=1" class="small">сите →</a>
+            </div>
+            {% for d in debtors %}
+                <a href="{% url 'manage_driver' d.driver_id %}" class="d-flex justify-content-between text-decoration-none text-body border-bottom py-2">
+                    <span>{{ d.driver_name }}
+                        {% if d.debt == 'blocked' %}<span class="badge text-bg-danger">блокиран</span>{% elif d.debt == 'warning' %}<span class="badge text-bg-warning">опомена</span>{% endif %}</span>
+                    <span class="fw-semibold text-danger">{{ d.balance }} ден.</span>
+                </a>
+            {% empty %}
+                <p class="text-secondary small mb-0">Никој не должи провизија. ✓</p>
+            {% endfor %}
+        </div></div>
+    </div>
+
+    {# ---------- Последни возења ---------- #}
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <div class="d-flex justify-content-between">
+                <h2 class="h6 mb-3">Последни возења</h2>
+                <a href="{% url 'manage_rides' %}" class="small">сите →</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0 small">
+                    <thead><tr class="text-secondary"><th>#</th><th>Време</th><th>Корисник</th><th>Возач</th><th>Статус</th><th class="text-end">Цена</th></tr></thead>
+                    <tbody>
+                    {% for r in recent_rides %}
+                        <tr>
+                            <td><a href="{% url 'manage_ride' r.ride_id %}">{{ r.ride_id }}</a></td>
+                            <td>{{ r.request_time|date:"d.m H:i" }}</td>
+                            <td>{{ r.user_name }}</td>
+                            <td>{{ r.driver_name|default:"-" }}</td>
+                            <td>{{ r.ride_status|ride_status }}</td>
+                            <td class="text-end">{{ r.final_price|default:"-" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="text-secondary">Нема возења.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div></div>
+    </div>
+</div>
+{% endblock %}

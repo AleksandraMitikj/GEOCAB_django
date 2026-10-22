@@ -1,0 +1,37 @@
+{% extends 'GEOCAB_APP/base.html' %}
+
+{% block title %}Најава - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-4">Најава</h2>
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+
+                    <div class="btn-group w-100 mb-3 gc-role-switch" role="group">
+                        {% for choice in form.role %}
+                            <input type="radio" class="btn-check" name="{{ choice.data.name }}" id="{{ choice.id_for_label }}"
+                                   value="{{ choice.data.value }}" {% if choice.data.selected %}checked{% endif %}>
+                            <label class="btn btn-outline-dark" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                        {% endfor %}
+                    </div>
+
+                    {% include 'GEOCAB_APP/partials/field.html' with field=form.username %}
+                    {% include 'GEOCAB_APP/partials/field.html' with field=form.password %}
+                    <div class="text-end mb-3 mt-n2"><a href="{% url 'forgot_password' %}" class="small">Заборавена лозинка?</a></div>
+                    <button type="submit" class="btn btn-dark w-100">Најави се</button>
+                </form>
+
+                <p class="text-center small mt-3 mb-0">
+                    Немате профил? <a href="{% url 'register' %}">Регистрирајте се</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{# Мапа со пат по улиците за возачот. Параметри: pickup_lat/lng, dropoff_lat/lng, target ('pickup' или 'dropoff') #}
+<div id="route-map" class="rounded-3 shadow-sm mb-2" style="height: 300px"
+     data-pickup="{{ pickup_lat|stringformat:'s' }},{{ pickup_lng|stringformat:'s' }}"
+     data-dropoff="{{ dropoff_lat|stringformat:'s' }},{{ dropoff_lng|stringformat:'s' }}"
+     data-driver="{{ shift.current_location.latitude|stringformat:'s' }},{{ shift.current_location.longitude|stringformat:'s' }}"
+     data-target="{{ target }}"></div>
+<div class="small text-secondary mb-1" id="route-legend">
+    <span style="color:#0d6efd">━</span> {% if target == 'pickup' %}до корисникот{% else %}до дестинацијата{% endif %}
+    {% if target == 'pickup' %}· <span style="color:#198754">┅</span> потоа до дестинацијата{% endif %}
+</div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <div class="small" id="route-info">Се пресметува патот...</div>
+    {% if show_nav %}
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+        <a id="nav-google" class="btn btn-sm btn-primary" target="_blank" rel="noopener"
+           title="{% if target == 'pickup' %}Вие → корисникот → дестинацијата{% else %}Вие → дестинацијата{% endif %}">🧭 Google Maps</a>
+        {% if target == 'pickup' %}
+            <a id="nav-waze-pickup" class="btn btn-sm btn-info text-white" target="_blank" rel="noopener">🚙 Waze → корисник</a>
+        {% endif %}
+        <a id="nav-waze-dropoff" class="btn btn-sm {% if target == 'pickup' %}btn-outline-info{% else %}btn-info text-white{% endif %}" target="_blank" rel="noopener">🚙 Waze → дестинација</a>
+    </div>
+    {% endif %}
+</div>
+<details class="small mb-2" id="route-steps-box" hidden>
+    <summary>Упатства чекор по чекор</summary>
+    <ol class="mt-2 mb-0 ps-3" id="route-steps"></ol>
+</details>
