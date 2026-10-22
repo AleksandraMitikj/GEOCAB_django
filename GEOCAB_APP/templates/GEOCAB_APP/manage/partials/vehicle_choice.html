@@ -10,8 +10,10 @@
         <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.plate %}</div>
         <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.traffic_permit %}</div>
         <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.vehicle_type %}</div>
-        <div class="col-md-3">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.color %}</div>
-        <div class="col-md-3">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.year %}</div>
+        <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.model_name %}</div>
+        <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.color %}</div>
+        <div class="col-md-6">{% include 'GEOCAB_APP/partials/field.html' with field=vehicle_form.year %}</div>
+        <datalist id="vehicle-models">{% for m in vehicle_form.model_suggestions %}<option value="{{ m }}">{% endfor %}</datalist>
     </div>
 </div>
 <div data-mode="existing">

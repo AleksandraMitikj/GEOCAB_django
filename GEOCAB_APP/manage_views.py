@@ -20,7 +20,7 @@ from .forms import (AdminSetPasswordForm, CommissionForm, profile_form, NewDrive
                     VehicleChoiceForm, VehicleForm)
 from .models import (ActiveDrivers, Cancellations, CommissionPayouts, Drivers, DriversVehicleOwnership, Notifications,
                      Payments, PlatformSettings, PricingRules, Ratings, RideRejections, Rides, Status, Users,
-                     VehicleOwnership, VehicleTypes, VehiclesModel)
+                     VehicleOwnership, VehicleTypes)
 
 
 def _by_driver(view, where=None, params=()):
@@ -127,7 +127,7 @@ def driver_detail(request, driver_id):
         'summary': db.fetch_view('vw_driver_earnings_summary', 'driver_id = %s', [driver.pk])[0],
         'balance': balance,
         'debt': db.driver_debt_status(driver.pk),
-        'vehicles': VehicleOwnership.objects.filter(driversvehicleownership__driver=driver).select_related('vehicle_type'),
+        'vehicles': VehicleOwnership.objects.filter(driversvehicleownership__driver=driver).select_related('vehicle_type', 'vehicles_model'),
         'payouts': CommissionPayouts.objects.filter(driver=driver).select_related('admin').order_by('-payout_id'),
         'payout_form': PayoutForm(initial={'amount': balance['balance'] if balance['balance'] > 0 else None}),
         'vehicle_choice': VehicleChoiceForm(allow_none=False),
@@ -294,9 +294,10 @@ def ride_action(request, ride_id):
 
 def _vehicle_classes():
     classes = []
-    for vt in VehicleTypes.objects.select_related('vehicles_model').order_by('vehicle_type_id'):
+    brands = {r['vehicle_class']: r['brands'] for r in db.fetch_view('vw_price_list')}
+    for vt in VehicleTypes.objects.order_by('vehicle_type_id'):
         rule = PricingRules.objects.filter(vehicle_type=vt).order_by('tariff_id').first()
-        classes.append({'type': vt, 'rule': rule,
+        classes.append({'type': vt, 'rule': rule, 'brands': brands.get(vt.description),
                         'vehicles': VehicleOwnership.objects.filter(vehicle_type=vt).count()})
     return classes
 
@@ -330,9 +331,7 @@ def settings_view(request):
             if new_class_form.is_valid():
                 c = new_class_form.cleaned_data
                 with transaction.atomic():
-                    model, _ = VehiclesModel.objects.get_or_create(model=c['model'].strip())
-                    vehicle_type = VehicleTypes.objects.create(type_name=c['type_name'], description=c['description'],
-                                                               vehicles_model=model)
+                    vehicle_type = VehicleTypes.objects.create(type_name=c['type_name'], description=c['description'])
                     PricingRules.objects.create(vehicle_type=vehicle_type, base_price=c['base_price'],
                                                 price_per_km=c['price_per_km'])
                 messages.success(request, f'Додадена е класата {c["description"]}.')

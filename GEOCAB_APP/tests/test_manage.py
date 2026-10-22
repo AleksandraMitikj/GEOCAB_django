@@ -33,7 +33,7 @@ class ManageDriversTest(GeocabTestCase):
     def test_new_driver_with_new_vehicle(self):
         response = self.client.post('/manage/drivers/new/', {**NEW_DRIVER, 'vehicle_mode': 'new', 'v-plate': 'SK-9001-TT',
                                                               'v-traffic_permit': 'TD-9001', 'v-vehicle_type': self.standard.pk,
-                                                              'v-color': 'сива', 'v-year': '2019'}, follow=True)
+                                                              'v-model_name': 'Toyota Corolla', 'v-color': 'сива', 'v-year': '2019'}, follow=True)
         driver = Drivers.objects.get(username='trajko')
         self.assertTrue(any('е регистриран' in m for m in messages_of(response)))
         self.assertEqual((driver.status.status_text, driver.rating, driver.created_by_admin_id), ('active', Decimal('5.00'), self.admin.pk))
@@ -111,16 +111,16 @@ class ManageDriversTest(GeocabTestCase):
         driver = self.make_driver('marko')
         url = f'/manage/drivers/{driver.pk}/action/'
         self.client.post(url, {'action': 'add_vehicle', 'vehicle_mode': 'new', 'v-plate': 'SK-2222-AB', 'v-traffic_permit': 'TD-2222',
-                               'v-vehicle_type': self.premium.pk, 'v-color': 'црна', 'v-year': '2022'})
+                               'v-vehicle_type': self.premium.pk, 'v-model_name': 'Toyota Corolla', 'v-color': 'црна', 'v-year': '2022'})
         self.assertEqual(DriversVehicleOwnership.objects.filter(driver=driver).count(), 2)
         response = self.client.post(url, {'action': 'add_vehicle', 'vehicle_mode': 'new', 'v-plate': 'SK-2222-AB', 'v-traffic_permit': 'X',
-                                          'v-vehicle_type': self.premium.pk, 'v-color': 'c', 'v-year': '2022'}, follow=True)
+                                          'v-vehicle_type': self.premium.pk, 'v-model_name': 'Toyota Corolla', 'v-color': 'c', 'v-year': '2022'}, follow=True)
         self.assertTrue(any('Возилото не е зачувано' in m for m in messages_of(response)))
         vehicle = VehicleOwnership.objects.get(plate='SK-2222-AB')
         self.assertTrue(any('1900' in e for e in field_errors(self.client.post(f'/manage/vehicles/{vehicle.pk}/?driver={driver.pk}',
-                        {'plate': 'SK-2222-AB', 'traffic_permit': 'TD-2222', 'vehicle_type': self.premium.pk, 'color': 'c', 'year': '1800'}))))
+                        {'plate': 'SK-2222-AB', 'traffic_permit': 'TD-2222', 'vehicle_type': self.premium.pk, 'model_name': 'Toyota Corolla', 'color': 'c', 'year': '1800'}))))
         response = self.client.post(f'/manage/vehicles/{vehicle.pk}/?driver={driver.pk}', {'plate': 'SK-3333-AB', 'traffic_permit': 'TD-2222',
-                                    'vehicle_type': self.premium.pk, 'color': 'бела', 'year': '2023'})
+                                    'vehicle_type': self.premium.pk, 'model_name': 'Mercedes E-Class', 'color': 'бела', 'year': '2023'})
         self.assertEqual(response.url, f'/manage/drivers/{driver.pk}/')
         self.start_shift(driver)
         response = self.client.post(url, {'action': 'remove_vehicle', 'vehicle_id': driver.vehicle.pk}, follow=True)
@@ -128,6 +128,91 @@ class ManageDriversTest(GeocabTestCase):
         self.client.post(url, {'action': 'remove_vehicle', 'vehicle_id': vehicle.pk})
         self.assertFalse(DriversVehicleOwnership.objects.filter(driver=driver, vehicle_ownership=vehicle).exists())
         self.assertTrue(VehicleOwnership.objects.filter(pk=vehicle.pk).exists())
+
+
+class VehicleBrandTest(GeocabTestCase):
+    """Класата (Standard/Premium) ја одредува цената; марката и моделот се посебно поле на возилото."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = self.login('admin', 'admin')
+
+    def new_driver(self, username, plate, vehicle_class, model_name):
+        n = len(plate)
+        return self.client.post('/manage/drivers/new/', {
+            **NEW_DRIVER, 'username': username, 'phone': f'07055{n}{len(username)}11', 'email': f'{username}@test.mk',
+            'license_number': f'VD-{username}', 'vehicle_mode': 'new', 'v-plate': plate, 'v-traffic_permit': f'TD-{plate}',
+            'v-vehicle_type': vehicle_class.pk, 'v-model_name': model_name, 'v-color': 'бела', 'v-year': '2021'})
+
+    def test_class_select_shows_only_class_names(self):
+        form = self.client.get('/manage/drivers/new/').context['vehicle_form']
+        labels = [label for _, label in form.fields['vehicle_type'].choices][1:]
+        self.assertEqual(labels, ['Standard', 'Premium'])
+        html = self.client.get('/manage/drivers/new/').content.decode()
+        self.assertIn('Марка и модел', html)
+        self.assertIn('<datalist id="vehicle-models">', html)
+        self.assertIn('<option value="Škoda Octavia">', html)
+
+    def test_new_brand_is_created_and_existing_reused(self):
+        from GEOCAB_APP.models import VehiclesModel
+        self.new_driver('teodor', 'SK-1111-AA', self.standard, '  Toyota   Corolla ')
+        vehicle = VehicleOwnership.objects.get(plate='SK-1111-AA')
+        self.assertEqual((vehicle.vehicle_type.description, vehicle.vehicles_model.model), ('Standard', 'Toyota Corolla'))
+        self.new_driver('ivan', 'SK-2222-AA', self.premium, 'toyota corolla')   # иста марка, друга класа
+        self.assertEqual(VehiclesModel.objects.filter(model__iexact='toyota corolla').count(), 1)
+        self.assertEqual(VehicleOwnership.objects.get(plate='SK-2222-AA').vehicle_type, self.premium)
+
+    def test_brand_is_required(self):
+        response = self.new_driver('teodor', 'SK-1111-AA', self.standard, '')
+        self.assertIn('This field is required.', field_errors(response))
+        self.assertFalse(VehicleOwnership.objects.filter(plate='SK-1111-AA').exists())
+
+    def test_price_depends_only_on_class(self):
+        from GEOCAB_APP.models import VehiclesModel
+        toyota = VehiclesModel.objects.create(model='Toyota Corolla')
+        skoda_driver = self.make_driver('skoda')
+        toyota_driver = self.make_driver('toyota')
+        VehicleOwnership.objects.filter(pk=toyota_driver.vehicle.pk).update(vehicles_model=toyota)
+        self.make_user('ana')
+        user = self.login('user', 'ana')
+        prices = []
+        for driver, username in ((skoda_driver, 'skoda'), (toyota_driver, 'toyota')):
+            self.start_shift(driver)
+            ride = self.full_ride(user, self.login('driver', username))
+            prices.append(ride.final_price)
+            self.login('driver', username).post('/driver/action/', {'action': 'end_shift'})
+        self.assertEqual(prices, [Decimal('251.60'), Decimal('251.60')])
+
+    def test_brand_shown_on_ride_and_driver_pages(self):
+        driver = self.make_driver('marko')
+        self.start_shift(driver)
+        self.make_user('ana')
+        user = self.login('user', 'ana')
+        self.request_ride(user)
+        driver_client = self.login('driver', 'marko')
+        self.drive(driver_client, self.latest_ride(), ('accept',))
+        self.assertIn('Škoda Octavia', user.get('/ride/current/').content.decode())
+        self.assertIn('Škoda Octavia', driver_client.get('/driver/').content.decode())
+        self.assertIn('Škoda Octavia', driver_client.get('/driver/profile/').content.decode())
+        self.assertIn('Škoda Octavia', self.client.get(f'/manage/drivers/{driver.pk}/').content.decode())
+
+    def test_edit_vehicle_brand(self):
+        driver = self.make_driver('marko')
+        url = f'/manage/vehicles/{driver.vehicle.pk}/?driver={driver.pk}'
+        self.assertEqual(self.client.get(url).context['form']['model_name'].value(), 'Škoda Octavia')
+        self.client.post(url, {'plate': driver.vehicle.plate, 'traffic_permit': driver.vehicle.traffic_permit,
+                               'vehicle_type': self.premium.pk, 'model_name': 'Mercedes E-Class', 'color': 'црна', 'year': '2022'})
+        vehicle = VehicleOwnership.objects.select_related('vehicle_type', 'vehicles_model').get(pk=driver.vehicle.pk)
+        self.assertEqual((vehicle.vehicle_type.description, vehicle.vehicles_model.model), ('Premium', 'Mercedes E-Class'))
+
+    def test_class_names_are_unique_in_database(self):
+        with self.assertRaisesMessage(DatabaseError, 'uq_vehicle_types_class'), transaction.atomic():
+            VehicleTypes.objects.create(type_name='X', description='Standard')
+
+    def test_settings_list_brands_per_class(self):
+        self.make_driver('marko')
+        html = self.client.get('/manage/settings/').content.decode()
+        self.assertIn('1 возила (Škoda Octavia)', html)
 
 
 class ManageRidesTest(GeocabTestCase):
@@ -206,10 +291,10 @@ class ManageSettingsAndUsersTest(GeocabTestCase):
         self.assertEqual((rule.base_price, rule.price_per_km), (Decimal('120.00'), Decimal('45.00')))
         response = self.client.post('/manage/settings/', {'action': 'price', 'vehicle_type_id': self.standard.pk, 'base_price': '-1', 'price_per_km': '1'}, follow=True)
         self.assertIn('Цените мора да се броеви поголеми или еднакви на 0.', messages_of(response))
-        self.client.post('/manage/settings/', {'action': 'new_class', 'description': 'Van', 'type_name': 'Minivan', 'model': 'VW Transporter',
+        self.client.post('/manage/settings/', {'action': 'new_class', 'description': 'Van', 'type_name': 'Minivan',
                                                'base_price': '200', 'price_per_km': '70'})
         self.assertTrue(PricingRules.objects.filter(vehicle_type__description='Van', base_price=200).exists())
-        response = self.client.post('/manage/settings/', {'action': 'new_class', 'description': 'van', 'type_name': 'X', 'model': 'Y',
+        response = self.client.post('/manage/settings/', {'action': 'new_class', 'description': 'van', 'type_name': 'X',
                                                           'base_price': '1', 'price_per_km': '1'})
         self.assertIn('Таа класа веќе постои.', field_errors(response))
         self.make_user('ana')
@@ -285,7 +370,7 @@ class DatabaseRulesTest(GeocabTestCase):
         self.assertDbError('chk_users_phone', Users.objects.create, name='x', username='x', phone='abc', email='x@y.mk',
                            password_hash='x', status=status('user', 'active'))
         self.assertDbError('chk_vehicle_year', VehicleOwnership.objects.create, plate='P', traffic_permit='T', color='c', year=1800,
-                           vehicle_type=self.standard)
+                           vehicle_type=self.standard, vehicles_model=self.model)
         self.assertDbError('chk_price', PricingRules.objects.create, base_price=-1, price_per_km=1, vehicle_type=self.standard)
         self.assertDbError('chk_commission', PlatformSettings.objects.filter(pk=1).update, commission_percentage=101)
 

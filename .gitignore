@@ -19,3 +19,6 @@ db.sqlite3
 # Логови и локални env фајлови
 *.log
 .env
+
+# Локални инструкции за Claude (не се праќаат на GitHub)
+CLAUDE.md

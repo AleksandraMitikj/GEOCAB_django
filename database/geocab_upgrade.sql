@@ -10,6 +10,7 @@
 --   3. Пријави на проблем во тек на возење
 --   4. Месечен рок за провизија, опомена и блокада
 --   5. GPS позиција на возачот и цена по вистински пат
+--   6. Марката/моделот е на возилото, класата (Vehicle_types) е само класа со цена
 -- =====================================================================
 
 -- Поставки на платформата (секогаш точно еден ред, setting_id = 1)
@@ -600,3 +601,194 @@ BEGIN
     RETURN v_ride_id;
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+-- =====================================================================
+-- 6. Марката/моделот се преместува од класата (Vehicle_types) на возилото (Vehicle_ownership).
+--    Класата (Standard, Premium) ја одредува цената; марката е податок за конкретното возило.
+-- =====================================================================
+
+ALTER TABLE Vehicle_ownership ADD COLUMN IF NOT EXISTS vehicles_model_id INT;
+
+-- секое постоечко возило ја добива марката што досега ја имаше неговата класа
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'vehicle_types' AND column_name = 'vehicles_model_id') THEN
+        UPDATE Vehicle_ownership vo
+        SET vehicles_model_id = vt.vehicles_model_id
+        FROM Vehicle_types vt
+        WHERE vo.vehicle_type_id = vt.vehicle_type_id
+          AND vo.vehicles_model_id IS NULL;
+    END IF;
+END $$;
+
+ALTER TABLE Vehicle_ownership ALTER COLUMN vehicles_model_id SET NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_vehicle_ownership_model') THEN
+        ALTER TABLE Vehicle_ownership
+            ADD CONSTRAINT FK_Vehicle_ownership_Model
+                FOREIGN KEY (vehicles_model_id) REFERENCES Vehicles_model(Vehicles_model_id)
+                    ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+END $$;
+
+-- views ја земаат марката од возилото
+CREATE OR REPLACE VIEW vw_driver_profile AS
+SELECT
+    d.driver_id,
+    d.name                                  AS driver_name,
+    d.phone                                 AS driver_phone,
+    d.rating                                AS driver_rating,
+    d.registration_date,
+    -- Dali e momentalno aktiven/dostapen
+    ad.is_available,
+    ad.working_start,
+    ad.working_end,
+    -- Momentalna lokacija
+    l.grad                                  AS current_grad,
+    l.naselba                               AS current_naselba,
+    l.ulica                                 AS current_ulica,
+    l.latitude                              AS current_lat,
+    l.longitude                             AS current_lng,
+    -- Vozilo
+    vo.Vehicle_ownership_id,
+    vo.Plate                                AS vehicle_plate,
+    vo.Color                                AS vehicle_color,
+    vo.year                                 AS vehicle_year,
+    -- Tip i brend
+    vm.Model                                AS vehicle_brand,
+    vt.type_name                            AS vehicle_model,
+    vt.description                          AS vehicle_class,   -- Economy / Luxury
+    -- Cena za ovoj vozac
+    pr.base_price,
+    pr.price_per_km,
+    -- Status na vozacot
+    s.status_text                           AS driver_status
+FROM Drivers d
+         JOIN Status s                       ON d.status_id              = s.status_id
+         LEFT JOIN Active_drivers ad         ON d.driver_id              = ad.driver_id
+         LEFT JOIN Locations l               ON ad.current_location_id   = l.location_id
+         LEFT JOIN Vehicle_ownership vo      ON ad.vehicle_ownership_id  = vo.Vehicle_ownership_id
+         LEFT JOIN Vehicle_types vt          ON vo.vehicle_type_id       = vt.vehicle_type_id
+         LEFT JOIN Vehicles_model vm         ON vo.vehicles_model_id     = vm.Vehicles_model_id
+         LEFT JOIN Pricing_rules pr          ON vt.vehicle_type_id       = pr.vehicle_type_id
+WHERE s.status_text = 'active' and ad.is_available is true;
+
+CREATE OR REPLACE VIEW vw_active_driver_status
+            (driver_id, driver_name, driver_phone, driver_rating, is_available, working_start,
+             current_location_id, grad, naselba, current_street, vehicle_plate, vehicle_color,
+             vehicle_model, vehicle_class, vehicle_brand, base_price, price_per_km, driver_status)
+AS
+SELECT d.driver_id,
+       d.name         AS driver_name,
+       d.phone        AS driver_phone,
+       d.rating       AS driver_rating,
+       ad.is_available,
+       ad.working_start,
+       l.location_id  AS current_location_id,
+       l.grad,
+       l.naselba,
+       l.ulica        AS current_street,
+       vo.plate       AS vehicle_plate,
+       vo.color       AS vehicle_color,
+       vt.type_name   AS vehicle_model,
+       vt.description AS vehicle_class,
+       vm.model       AS vehicle_brand,
+       pr.base_price,
+       pr.price_per_km,
+       s.status_text  AS driver_status
+FROM active_drivers ad
+         JOIN drivers d ON ad.driver_id = d.driver_id
+         JOIN locations l ON ad.current_location_id = l.location_id
+         JOIN status s ON d.status_id = s.status_id
+         LEFT JOIN vehicle_ownership vo ON ad.vehicle_ownership_id = vo.vehicle_ownership_id
+         LEFT JOIN vehicle_types vt ON vo.vehicle_type_id = vt.vehicle_type_id
+         LEFT JOIN vehicles_model vm ON vo.vehicles_model_id = vm.vehicles_model_id
+         LEFT JOIN pricing_rules pr ON vt.vehicle_type_id = pr.vehicle_type_id
+WHERE s.status_text::text = 'active'::text
+  AND ad.working_end IS NULL;
+
+CREATE OR REPLACE VIEW vw_ride_details AS
+SELECT
+    r.ride_id,
+    -- Korisnik
+    u.user_id,
+    u.name                                  AS user_name,
+    u.phone                                 AS user_phone,
+    -- Vozac
+    d.driver_id,
+    d.name                                  AS driver_name,
+    d.phone                                 AS driver_phone,
+    d.rating                                AS driver_rating,
+    -- Avto
+    vo.plate       AS vehicle_plate,
+    vo.color       AS vehicle_color,
+    vt.type_name   AS vehicle_model,
+    vt.description AS vehicle_class,
+    vm.model       AS vehicle_brand,
+    -- Pickup lokacija
+    lp.grad                                 AS pickup_grad,
+    lp.naselba                              AS pickup_naselba,
+    lp.ulica                                AS pickup_ulica,
+    lp.broj                                 AS pickup_broj,
+    lp.latitude                             AS pickup_lat,
+    lp.longitude                            AS pickup_lng,
+    -- Dropoff lokacija
+    ld.grad                                 AS dropoff_grad,
+    ld.naselba                              AS dropoff_naselba,
+    ld.ulica                                AS dropoff_ulica,
+    ld.broj                                 AS dropoff_broj,
+    ld.latitude                             AS dropoff_lat,
+    ld.longitude                            AS dropoff_lng,
+    -- Vremijna sekvenca
+    r.request_time,
+    r.pickup_time,
+    r.start_time,
+    r.end_time,
+    -- Cena i distanca
+    r.distance_km,
+    r.discount_percentage,
+    r.final_price,
+    -- Status na voznata
+    s.status_text                           AS ride_status
+FROM Rides r
+         LEFT JOIN Users u        ON r.user_id                = u.user_id
+         LEFT JOIN Drivers d      ON r.driver_id              = d.driver_id
+         JOIN Locations lp   ON r.pickup_location_id     = lp.location_id
+         JOIN Locations ld   ON r.dropoff_location_id    = ld.location_id
+         JOIN Status s       ON r.status_id              = s.status_id
+         LEFT JOIN vehicle_ownership vo ON r.vehicle_ownership_id = vo.vehicle_ownership_id
+         LEFT JOIN vehicle_types vt ON vo.vehicle_type_id = vt.vehicle_type_id
+         LEFT JOIN vehicles_model vm ON vo.vehicles_model_id = vm.vehicles_model_id;
+
+CREATE OR REPLACE VIEW vw_price_list AS
+SELECT
+    vt.description                          AS vehicle_class,
+    pr.base_price,
+    pr.price_per_km,
+    COUNT(DISTINCT vo.vehicles_model_id)    AS models_count,     -- марки/модели на возилата во класата
+    string_agg(DISTINCT vm.Model, ', ')     AS brands
+FROM Vehicle_types vt
+         JOIN Pricing_rules pr       ON pr.vehicle_type_id  = vt.vehicle_type_id
+         LEFT JOIN Vehicle_ownership vo ON vo.vehicle_type_id = vt.vehicle_type_id
+         LEFT JOIN Vehicles_model vm ON vo.vehicles_model_id = vm.Vehicles_model_id
+GROUP BY vt.description, pr.base_price, pr.price_per_km;
+
+
+-- класата повеќе нема марка
+ALTER TABLE Vehicle_types DROP COLUMN IF EXISTS vehicles_model_id;
+
+-- класата е уникатна (функциите ја бараат по description)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_vehicle_types_class') THEN
+        IF EXISTS (SELECT description FROM Vehicle_types GROUP BY description HAVING COUNT(*) > 1) THEN
+            RAISE EXCEPTION 'Има повеќе класи со исто име во Vehicle_types - спојте ги пред надградбата';
+        END IF;
+        ALTER TABLE Vehicle_types ADD CONSTRAINT uq_vehicle_types_class UNIQUE (description);
+    END IF;
+END $$;

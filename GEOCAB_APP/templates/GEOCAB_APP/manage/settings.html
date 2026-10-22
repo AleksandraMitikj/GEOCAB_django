@@ -35,7 +35,7 @@
                 <tr>
                     <td>
                         <strong>{{ c.type.description }}</strong>
-                        <div class="small text-secondary">{{ c.type.type_name }} · {{ c.type.vehicles_model.model }} · {{ c.vehicles }} возила</div>
+                        <div class="small text-secondary">{{ c.type.type_name }} · {{ c.vehicles }} возила{% if c.brands %} ({{ c.brands }}){% endif %}</div>
                     </td>
                     <td colspan="3">
                         <form method="post" class="d-flex gap-2 align-items-center">

@@ -150,7 +150,7 @@ class VehiclesModelAdmin(admin.ModelAdmin):
 
 @admin.register(VehicleTypes)
 class VehicleTypesAdmin(admin.ModelAdmin):
-    list_display = ('vehicle_type_id', 'type_name', 'description', 'vehicles_model')
+    list_display = ('vehicle_type_id', 'description', 'type_name')
     list_filter = ('type_name',)
     search_fields = ('type_name', 'description')
 
@@ -210,8 +210,8 @@ class VehicleOwnershipForm(forms.ModelForm):
 @admin.register(VehicleOwnership)
 class VehicleOwnershipAdmin(admin.ModelAdmin):
     form = VehicleOwnershipForm
-    list_display = ('plate', 'vehicle_type', 'color', 'year', 'traffic_permit')
-    list_filter = ('vehicle_type',)
+    list_display = ('plate', 'vehicle_type', 'vehicles_model', 'color', 'year', 'traffic_permit')
+    list_filter = ('vehicle_type', 'vehicles_model')
     search_fields = ('plate', 'traffic_permit')
 
 

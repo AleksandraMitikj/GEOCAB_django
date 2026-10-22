@@ -21,15 +21,15 @@ from GEOCAB_APP.models import (
 
 TEST_PASSWORD = 'Geocab2026!'
 
-VEHICLES = [
-    # модел, тип, класа (description), почетна цена, цена по km
-    ('Škoda Octavia', 'Sedan', 'Standard', 100, 40),
-    ('Mercedes E-Class', 'Sedan', 'Premium', 150, 60),
+CLASSES = [
+    # класа (description), тип, почетна цена, цена по km
+    ('Standard', 'Sedan', 100, 40),
+    ('Premium', 'Sedan', 150, 60),
 ]
 CARS = [
-    # таблица, сообраќајна, боја, година, класа
-    ('SK-1234-AB', 'TD-100001', 'бела', 2021, 'Standard'),
-    ('SK-5678-CD', 'TD-100002', 'црна', 2023, 'Premium'),
+    # таблица, сообраќајна, боја, година, класа, марка и модел
+    ('SK-1234-AB', 'TD-100001', 'бела', 2021, 'Standard', 'Škoda Octavia'),
+    ('SK-5678-CD', 'TD-100002', 'црна', 2023, 'Premium', 'Mercedes E-Class'),
 ]
 DRIVERS = [
     # име, username, телефон, е-пошта, возачка, таблица
@@ -51,18 +51,17 @@ class Command(BaseCommand):
         status = lambda tip, text: Status.objects.get(status_tip=tip, status_text=text)
 
         types = {}
-        for model, type_name, vehicle_class, base, per_km in VEHICLES:
-            vm, _ = VehiclesModel.objects.get_or_create(model=model)
-            vt, _ = VehicleTypes.objects.get_or_create(
-                description=vehicle_class, defaults={'type_name': type_name, 'vehicles_model': vm})
+        for vehicle_class, type_name, base, per_km in CLASSES:
+            vt, _ = VehicleTypes.objects.get_or_create(description=vehicle_class, defaults={'type_name': type_name})
             PricingRules.objects.get_or_create(vehicle_type=vt, defaults={'base_price': base, 'price_per_km': per_km})
             types[vehicle_class] = vt
 
         cars = {}
-        for plate, permit, color, year, vehicle_class in CARS:
+        for plate, permit, color, year, vehicle_class, model in CARS:
+            vm, _ = VehiclesModel.objects.get_or_create(model=model)
             cars[plate], _ = VehicleOwnership.objects.get_or_create(
                 plate=plate, defaults={'traffic_permit': permit, 'color': color, 'year': year,
-                                       'vehicle_type': types[vehicle_class]})
+                                       'vehicle_type': types[vehicle_class], 'vehicles_model': vm})
 
         admin, _ = Admins.objects.get_or_create(
             username='admin_test', defaults={'name': 'Тест Администратор', 'phone': '+38970000001',

@@ -158,7 +158,7 @@
     <div class="card-body">
         <h2 class="h6 mb-3">Мои возила</h2>
         {% for v in vehicles %}
-            <div class="small mb-1">🚗 <strong>{{ v.plate }}</strong> · {{ v.vehicle_type.description }} · {{ v.color }} · {{ v.year }}</div>
+            <div class="small mb-1">🚗 <strong>{{ v.plate }}</strong> · {{ v.vehicle_type.description }} · {{ v.vehicles_model.model }} · {{ v.color }} · {{ v.year }}</div>
         {% empty %}
             <p class="text-secondary small mb-0">Немате доделено возило.</p>
         {% endfor %}

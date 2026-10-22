@@ -7,6 +7,7 @@
 <form method="post" novalidate>
     {% csrf_token %}
     {% for field in form %}{% include 'GEOCAB_APP/partials/field.html' %}{% endfor %}
+    <datalist id="vehicle-models">{% for m in form.model_suggestions %}<option value="{{ m }}">{% endfor %}</datalist>
     <button type="submit" class="btn btn-dark w-100">Зачувај возило</button>
 </form>
 {% endblock %}

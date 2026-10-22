@@ -299,7 +299,8 @@ def _driver_state(driver_id):
 
 
 def _driver_vehicles(driver_id):
-    return VehicleOwnership.objects.filter(driversvehicleownership__driver_id=driver_id).select_related('vehicle_type')
+    return (VehicleOwnership.objects.filter(driversvehicleownership__driver_id=driver_id)
+            .select_related('vehicle_type', 'vehicles_model'))
 
 
 @role_required('driver')

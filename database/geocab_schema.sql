@@ -125,16 +125,13 @@ CREATE TABLE Drivers (
                                  ON DELETE RESTRICT
 );
 
+-- Класа на возило (Standard, Premium...): description е името на класата што го гледа корисникот,
+-- а цената е во Pricing_rules. Марката/моделот е на самото возило (Vehicle_ownership.vehicles_model_id).
 CREATE TABLE Vehicle_types (
                                vehicle_type_id SERIAL PRIMARY KEY,
                                type_name VARCHAR(255) NOT NULL,
                                description VARCHAR(255) NOT NULL,
-                               Vehicles_model_id INT NOT NULL,
-                               CONSTRAINT FK_Vehicle_types_Model
-                                   FOREIGN KEY (Vehicles_model_id)
-                                       REFERENCES Vehicles_model(Vehicles_model_id)
-                                       ON DELETE RESTRICT
-                                       ON UPDATE CASCADE
+                               CONSTRAINT uq_vehicle_types_class UNIQUE (description)
 );
 
 CREATE TABLE Vehicle_ownership (
@@ -143,11 +140,17 @@ CREATE TABLE Vehicle_ownership (
                                    Traffic_permit VARCHAR(255) NOT NULL UNIQUE,
                                    Color VARCHAR(255) NOT NULL,
                                    year INT NOT NULL,
-                                   vehicle_type_id INT NOT NULL,
+                                   vehicle_type_id INT NOT NULL,         -- класа (цена)
+                                   vehicles_model_id INT NOT NULL,       -- марка и модел на возилото
                                    CONSTRAINT chk_vehicle_year CHECK (year >= 1900),
                                    CONSTRAINT FK_Vehicle_ownership_Type
                                        FOREIGN KEY (vehicle_type_id)
                                            REFERENCES Vehicle_types(vehicle_type_id)
+                                           ON DELETE RESTRICT
+                                           ON UPDATE CASCADE,
+                                   CONSTRAINT FK_Vehicle_ownership_Model
+                                       FOREIGN KEY (vehicles_model_id)
+                                           REFERENCES Vehicles_model(Vehicles_model_id)
                                            ON DELETE RESTRICT
                                            ON UPDATE CASCADE
 );
@@ -1795,7 +1798,7 @@ FROM Drivers d
          LEFT JOIN Locations l               ON ad.current_location_id   = l.location_id
          LEFT JOIN Vehicle_ownership vo      ON ad.vehicle_ownership_id  = vo.Vehicle_ownership_id
          LEFT JOIN Vehicle_types vt          ON vo.vehicle_type_id       = vt.vehicle_type_id
-         LEFT JOIN Vehicles_model vm         ON vt.Vehicles_model_id     = vm.Vehicles_model_id
+         LEFT JOIN Vehicles_model vm         ON vo.vehicles_model_id     = vm.Vehicles_model_id
          LEFT JOIN Pricing_rules pr          ON vt.vehicle_type_id       = pr.vehicle_type_id
 WHERE s.status_text = 'active' and ad.is_available is true;
 
@@ -1870,7 +1873,7 @@ FROM active_drivers ad
          JOIN status s ON d.status_id = s.status_id
          LEFT JOIN vehicle_ownership vo ON ad.vehicle_ownership_id = vo.vehicle_ownership_id
          LEFT JOIN vehicle_types vt ON vo.vehicle_type_id = vt.vehicle_type_id
-         LEFT JOIN vehicles_model vm ON vt.vehicles_model_id = vm.vehicles_model_id
+         LEFT JOIN vehicles_model vm ON vo.vehicles_model_id = vm.vehicles_model_id
          LEFT JOIN pricing_rules pr ON vt.vehicle_type_id = pr.vehicle_type_id
 WHERE s.status_text::text = 'active'::text
   AND ad.working_end IS NULL;
@@ -1926,7 +1929,7 @@ FROM Rides r
          JOIN Status s       ON r.status_id              = s.status_id
          LEFT JOIN vehicle_ownership vo ON r.vehicle_ownership_id = vo.vehicle_ownership_id
          LEFT JOIN vehicle_types vt ON vo.vehicle_type_id = vt.vehicle_type_id
-         LEFT JOIN vehicles_model vm ON vt.vehicles_model_id = vm.vehicles_model_id;
+         LEFT JOIN vehicles_model vm ON vo.vehicles_model_id = vm.vehicles_model_id;
 
 -- Поправено: без ORDER BY
 CREATE OR REPLACE VIEW vw_drivers_near_center AS
@@ -2132,11 +2135,12 @@ SELECT
     vt.description                          AS vehicle_class,
     pr.base_price,
     pr.price_per_km,
-    COUNT(DISTINCT vt.vehicle_type_id)      AS models_count,
+    COUNT(DISTINCT vo.vehicles_model_id)    AS models_count,     -- марки/модели на возилата во класата
     string_agg(DISTINCT vm.Model, ', ')     AS brands
 FROM Vehicle_types vt
-         JOIN Pricing_rules pr  ON pr.vehicle_type_id  = vt.vehicle_type_id
-         JOIN Vehicles_model vm ON vt.Vehicles_model_id = vm.Vehicles_model_id
+         JOIN Pricing_rules pr       ON pr.vehicle_type_id  = vt.vehicle_type_id
+         LEFT JOIN Vehicle_ownership vo ON vo.vehicle_type_id = vt.vehicle_type_id
+         LEFT JOIN Vehicles_model vm ON vo.vehicles_model_id = vm.Vehicles_model_id
 GROUP BY vt.description, pr.base_price, pr.price_per_km;
 
 -- Дневна статистика за администраторот

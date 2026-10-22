@@ -145,25 +145,43 @@ class NewDriverForm(forms.ModelForm):
 
 
 class VehicleForm(forms.ModelForm):
+    """Возило: класата (Standard/Premium) ја одредува цената, марката е посебно поле.
+    Нова марка се додава автоматски во Vehicles_model."""
+    model_name = forms.CharField(label='Марка и модел', max_length=255,
+                                 widget=forms.TextInput(attrs={'list': 'vehicle-models', 'placeholder': 'на пр. Toyota Corolla'}))
     year = forms.IntegerField(label='Година', validators=[MinValueValidator(1900)])
 
     class Meta:
         model = VehicleOwnership
-        fields = ('plate', 'traffic_permit', 'vehicle_type', 'color', 'year')
+        fields = ('plate', 'traffic_permit', 'vehicle_type', 'model_name', 'color', 'year')
         labels = {'plate': 'Регистарска таблица', 'traffic_permit': 'Сообраќајна дозвола',
                   'vehicle_type': 'Класа', 'color': 'Боја'}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['vehicle_type'].queryset = VehicleTypes.objects.select_related('vehicles_model')
-        self.fields['vehicle_type'].label_from_instance = lambda t: f'{t.description} ({t.vehicles_model.model})'
+        self.fields['vehicle_type'].queryset = VehicleTypes.objects.order_by('vehicle_type_id')
+        self.fields['vehicle_type'].label_from_instance = lambda t: t.description
+        if self.instance.pk:
+            self.fields['model_name'].initial = self.instance.vehicles_model.model
+        # предлози за полето „Марка и модел“ (<datalist>)
+        self.model_suggestions = VehiclesModel.objects.order_by('model').values_list('model', flat=True)
+
+    def save(self, commit=True):
+        name = ' '.join(self.cleaned_data['model_name'].split())
+        model = VehiclesModel.objects.filter(model__iexact=name).first() or VehiclesModel.objects.create(model=name)
+        self.instance.vehicles_model = model
+        return super().save(commit)
 
 
 def unassigned_vehicles():
     """Возила што не се доделени на ниеден возач."""
     return VehicleOwnership.objects.exclude(
         vehicle_ownership_id__in=DriversVehicleOwnership.objects.values('vehicle_ownership_id')
-    ).select_related('vehicle_type')
+    ).select_related('vehicle_type', 'vehicles_model')
+
+
+def vehicle_label(v):
+    return f'{v.plate} · {v.vehicle_type.description} · {v.vehicles_model.model} · {v.color}'
 
 
 class VehicleChoiceForm(forms.Form):
@@ -175,7 +193,7 @@ class VehicleChoiceForm(forms.Form):
     def __init__(self, *args, allow_none=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['existing_vehicle'].queryset = unassigned_vehicles()
-        self.fields['existing_vehicle'].label_from_instance = lambda v: f'{v.plate} · {v.vehicle_type.description} · {v.color}'
+        self.fields['existing_vehicle'].label_from_instance = vehicle_label
         if not allow_none:
             self.fields['vehicle_mode'].choices = self.MODES[:2]
 
@@ -207,10 +225,9 @@ class NewVehicleClassForm(PriceForm):
     """Нова класа на возило (Vehicle_types.description) со своја тарифа."""
     description = forms.CharField(label='Класа (ја гледа корисникот)', max_length=255,
                                   widget=forms.TextInput(attrs={'placeholder': 'на пр. Van'}))
-    type_name = forms.CharField(label='Тип', max_length=255, widget=forms.TextInput(attrs={'placeholder': 'на пр. Minivan'}))
-    model = forms.CharField(label='Модел на возило', max_length=255, widget=forms.TextInput(attrs={'placeholder': 'на пр. VW Transporter'}))
+    type_name = forms.CharField(label='Тип на возило', max_length=255, widget=forms.TextInput(attrs={'placeholder': 'на пр. Minivan'}))
 
-    field_order = ['description', 'type_name', 'model', 'base_price', 'price_per_km']
+    field_order = ['description', 'type_name', 'base_price', 'price_per_km']
 
     def clean_description(self):
         # функциите ја бараат класата по description, па мора да е единствена

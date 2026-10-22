@@ -60,7 +60,7 @@
                         <label class="form-label" for="id_vehicle_ownership">Возило</label>
                         <select name="vehicle_ownership" id="id_vehicle_ownership" class="form-select">
                             {% for v in vehicles %}
-                                <option value="{{ v.pk }}">{{ v.plate }} · {{ v.vehicle_type.description }} · {{ v.color }}</option>
+                                <option value="{{ v.pk }}">{{ v.plate }} · {{ v.vehicle_type.description }} · {{ v.vehicles_model.model }} · {{ v.color }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -80,7 +80,7 @@
                 <span class="badge text-bg-light border" id="gps-status" title="GPS локација">📡 GPS се вклучува...</span>
                 <span class="small text-secondary ms-1">од {{ shift.working_start|date:"H:i" }}</span>
                 <div class="small mt-1">
-                    🚗 {{ shift.vehicle_ownership.plate }} · {{ shift.vehicle_ownership.vehicle_type.description }}
+                    🚗 {{ shift.vehicle_ownership.plate }} · {{ shift.vehicle_ownership.vehicle_type.description }} · {{ shift.vehicle_ownership.vehicles_model.model }}
                     · 📍 {{ shift.current_location.ulica }}, {{ shift.current_location.naselba }}
                 </div>
             </div>

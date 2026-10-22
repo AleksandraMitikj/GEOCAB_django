@@ -54,8 +54,8 @@ class GeocabTestCase(TestCase):
         self.addCleanup(patcher.stop)
 
         self.model = VehiclesModel.objects.create(model='Škoda Octavia')
-        self.standard = VehicleTypes.objects.create(type_name='Sedan', description='Standard', vehicles_model=self.model)
-        self.premium = VehicleTypes.objects.create(type_name='Sedan', description='Premium', vehicles_model=self.model)
+        self.standard = VehicleTypes.objects.create(type_name='Sedan', description='Standard')
+        self.premium = VehicleTypes.objects.create(type_name='Sedan', description='Premium')
         PricingRules.objects.create(base_price=100, price_per_km=40, vehicle_type=self.standard)
         PricingRules.objects.create(base_price=150, price_per_km=60, vehicle_type=self.premium)
         self.admin = self.make_admin('admin')
@@ -77,7 +77,8 @@ class GeocabTestCase(TestCase):
     def make_vehicle(self, vehicle_type=None, plate=None):
         n = next(_ids)
         return VehicleOwnership.objects.create(plate=plate or f'SK-{n:04d}-TT', traffic_permit=f'TD-{n:05d}',
-                                               color='бела', year=2020, vehicle_type=vehicle_type or self.standard)
+                                               color='бела', year=2020, vehicle_type=vehicle_type or self.standard,
+                                               vehicles_model=self.model)
 
     def make_driver(self, username='marko', vehicle=True, vehicle_type=None):
         n = next(_ids)

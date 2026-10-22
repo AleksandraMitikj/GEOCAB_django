@@ -321,7 +321,8 @@ class VehicleOwnership(models.Model):
     traffic_permit = models.CharField(unique=True, max_length=255)
     color = models.CharField(max_length=255)
     year = models.IntegerField()
-    vehicle_type = models.ForeignKey('VehicleTypes', models.DO_NOTHING)
+    vehicle_type = models.ForeignKey('VehicleTypes', models.DO_NOTHING)       # класа (цена)
+    vehicles_model = models.ForeignKey('VehiclesModel', models.DO_NOTHING)    # марка и модел
 
     class Meta:
         managed = False
@@ -332,17 +333,17 @@ class VehicleOwnership(models.Model):
 
 
 class VehicleTypes(models.Model):
+    """Класа на возило (Standard, Premium...) - ја одредува цената. Марката е на возилото."""
     vehicle_type_id = models.AutoField(primary_key=True)
     type_name = models.CharField(max_length=255)
-    description = models.CharField(max_length=255)
-    vehicles_model = models.ForeignKey('VehiclesModel', models.DO_NOTHING)
+    description = models.CharField(unique=True, max_length=255)   # името на класата
 
     class Meta:
         managed = False
         db_table = 'vehicle_types'
 
     def __str__(self):
-        return self.type_name
+        return self.description
 
 
 class VehiclesModel(models.Model):

@@ -134,7 +134,7 @@
                 <h2 class="h6 mb-3">Возила</h2>
                 {% for v in vehicles %}
                     <div class="small mb-2 d-flex flex-wrap align-items-center gap-2">
-                        <span class="flex-grow-1">🚗 <strong>{{ v.plate }}</strong> · {{ v.vehicle_type.description }} · {{ v.color }} · {{ v.year }}</span>
+                        <span class="flex-grow-1">🚗 <strong>{{ v.plate }}</strong> · {{ v.vehicle_type.description }} · {{ v.vehicles_model.model }} · {{ v.color }} · {{ v.year }}</span>
                         <a href="{% url 'manage_vehicle' v.pk %}?driver={{ driver.pk }}" class="btn btn-outline-dark btn-sm py-0">Уреди</a>
                         <form method="post" action="{% url 'manage_driver_action' driver.pk %}" class="d-inline"
                               onsubmit="return confirm('Да го отстранам {{ v.plate }} од возачот?');">
