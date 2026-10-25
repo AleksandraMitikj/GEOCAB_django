@@ -1,0 +1,52 @@
+{% load static %}
+{% comment %}
+Заеднички изглед на страниците за грешки.
+Параметри: code, heading, text, scene (име на сликата errors/scene_*.html),
+actions ('csrf' | 'reload' | празно = копчиња според улогата), stopped (таксито стои и чади).
+{% endcomment %}
+<section class="gc-hero gc-error">
+    <div class="container gc-hero-content">
+        <div class="row align-items-center g-4">
+            <div class="col-lg-7 text-center text-lg-start">
+                <div class="gc-eyebrow mb-2">Грешка {{ code }}</div>
+                <div class="gc-error-code" aria-hidden="true">{{ code }}</div>
+                <h1 class="fw-bold mb-3">{{ heading }}</h1>
+                <p class="lead opacity-75 mb-4">{{ text }}</p>
+
+                <div class="d-flex flex-wrap gap-3 justify-content-center justify-content-lg-start">
+                    {% if actions == 'csrf' %}
+                        <a href="{{ back_url|default:'/' }}" class="btn btn-gc btn-lg px-4">Отвори ја страницата повторно</a>
+                        <a href="{% url 'home' %}" class="btn btn-outline-light btn-lg px-4">Почетна</a>
+                    {% elif actions == 'reload' %}
+                        <button type="button" class="btn btn-gc btn-lg px-4" onclick="location.reload()">Обиди се повторно</button>
+                        <a href="{% url 'home' %}" class="btn btn-outline-light btn-lg px-4">Почетна</a>
+                    {% else %}
+                        {% with role=request.session.geocab.role %}
+                            {% if role == 'user' %}
+                                <a href="{% url 'ride_new' %}" class="btn btn-gc btn-lg px-4">Побарај возење</a>
+                            {% elif role == 'driver' %}
+                                <a href="{% url 'driver_dashboard' %}" class="btn btn-gc btn-lg px-4">Моја смена</a>
+                            {% elif role == 'admin' %}
+                                <a href="{% url 'manage_dashboard' %}" class="btn btn-gc btn-lg px-4">Админ панел</a>
+                            {% endif %}
+                            <a href="{% url 'home' %}" class="btn {% if role %}btn-outline-light{% else %}btn-gc{% endif %} btn-lg px-4">Почетна</a>
+                        {% endwith %}
+                        <button type="button" class="btn btn-link link-light text-decoration-none gc-back" onclick="history.back()" hidden>← Назад</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-lg-5 d-none d-md-block text-center">
+                <div class="gc-error-scene gc-float mx-auto">{% include 'GEOCAB_APP/errors/scene_'|add:scene|add:'.html' %}</div>
+            </div>
+        </div>
+    </div>
+    <img src="{% static 'GEOCAB_APP/img/city.svg' %}" alt="" class="gc-city">
+    <div class="gc-taxi{% if stopped %} gc-taxi-stopped{% endif %}">
+        {% if stopped %}<div class="gc-smoke" aria-hidden="true"><span></span><span></span><span></span></div>{% endif %}
+        <img src="{% static 'GEOCAB_APP/img/taxi.svg' %}" alt="GEOCAB такси" class="{% if not stopped %}gc-taxi-bounce {% endif %}w-100">
+    </div>
+</section>
+<script>
+    // „Назад“ има смисла само ако има претходна страница
+    document.querySelectorAll('.gc-back').forEach(b => { b.hidden = history.length < 2; });
+</script>

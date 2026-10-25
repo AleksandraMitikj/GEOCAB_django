@@ -1,0 +1,3 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% block title %}Немате пристап · GEOCAB{% endblock %}
+{% block page %}{% include 'GEOCAB_APP/errors/hero.html' with code='403' scene='barrier' heading='Немате пристап до оваа страница' text='Оваа страница е за друга улога или само за овластени лица. Ако мислите дека е грешка, најавете се со вистинскиот профил.' %}{% endblock %}

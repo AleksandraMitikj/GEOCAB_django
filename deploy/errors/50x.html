@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="mk">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- страницата сама се освежува на 30 секунди: кога GEOCAB ќе проработи, корисникот се враќа -->
+    <meta http-equiv="refresh" content="30">
+    <title>GEOCAB се ажурира</title>
+    <!--
+        502/503/504: ја служи nginx кога Docker контејнерот на GEOCAB не одговара (рестарт, ажурирање).
+        Сè е во овој фајл (без Django, без CDN), за да работи и кога апликацијата е исклучена.
+    -->
+    <style>
+        * { box-sizing: border-box; }
+        html, body { margin: 0; height: 100%; }
+        body {
+            display: flex; flex-direction: column; min-height: 100vh; color: #fff;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            background: radial-gradient(circle at 85% 15%, rgba(255, 193, 7, .35), transparent 40%),
+                        linear-gradient(135deg, #1b1f3b 0%, #2b3170 60%, #3d2e7c 100%);
+            overflow-x: hidden;
+        }
+        header, footer { background: #212529; padding: .9rem 1rem; }
+        header { font-weight: 700; font-size: 1.25rem; }
+        footer { color: rgba(255, 255, 255, .5); font-size: .875rem; }
+        .y { color: #ffc107; }
+        main { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+               padding: 3rem 1rem 11rem; position: relative; }
+        .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .8rem; font-weight: 700; color: #f0a800; }
+        h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); margin: .5rem 0 1rem; }
+        p { font-size: 1.15rem; opacity: .8; max-width: 36rem; margin: 0 auto 1.8rem; line-height: 1.5; }
+        .btn { display: inline-block; background: #ffc107; color: #1b1f3b; font-weight: 600; font-size: 1.1rem;
+               padding: .7rem 1.6rem; border-radius: .5rem; text-decoration: none; border: 0; cursor: pointer; }
+        .btn:hover { background: #f0a800; }
+        .cones { display: flex; justify-content: center; gap: 1.2rem; margin-bottom: 1.5rem; }
+        .cones svg { width: 46px; animation: bob 2s ease-in-out infinite alternate; }
+        .cones svg:nth-child(2) { animation-delay: .4s; }
+        .cones svg:nth-child(3) { animation-delay: .8s; }
+        @keyframes bob { to { transform: translateY(-8px); } }
+        .road { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: #1b1f3b; }
+        .road::after { content: ""; position: absolute; left: 0; right: 0; top: 32px; height: 6px;
+                       background: repeating-linear-gradient(90deg, #ffc107 0 40px, transparent 40px 80px); opacity: .7; }
+        .taxi { position: absolute; bottom: 48px; left: calc(50% - 95px); width: 190px; }
+        @media (prefers-reduced-motion: reduce) { .cones svg { animation: none; } }
+        @media (max-width: 576px) { .taxi { width: 140px; left: calc(50% - 70px); } }
+    </style>
+</head>
+<body>
+<header>🚕 GEO<span class="y">CAB</span></header>
+<main>
+    <div>
+        <div class="cones" aria-hidden="true">
+            <svg viewBox="0 0 60 70"><path d="M24 4 h12 l18 56 h-48 Z" fill="#ff7a1a"/><path d="M19 22 h22 l3 10 h-28 Z M14 40 h32 l3 10 h-38 Z" fill="#fff"/><rect x="0" y="60" width="60" height="8" rx="3" fill="#ff7a1a"/></svg>
+            <svg viewBox="0 0 60 70"><path d="M24 4 h12 l18 56 h-48 Z" fill="#ff7a1a"/><path d="M19 22 h22 l3 10 h-28 Z M14 40 h32 l3 10 h-38 Z" fill="#fff"/><rect x="0" y="60" width="60" height="8" rx="3" fill="#ff7a1a"/></svg>
+            <svg viewBox="0 0 60 70"><path d="M24 4 h12 l18 56 h-48 Z" fill="#ff7a1a"/><path d="M19 22 h22 l3 10 h-28 Z M14 40 h32 l3 10 h-38 Z" fill="#fff"/><rect x="0" y="60" width="60" height="8" rx="3" fill="#ff7a1a"/></svg>
+        </div>
+        <div class="eyebrow">Привремено недостапно</div>
+        <h1>GEOCAB моментално се ажурира</h1>
+        <p>Наскоро сме повторно на патот. Страницата сама ќе се освежи за 30 секунди.</p>
+        <button type="button" class="btn" onclick="location.reload()">Обиди се повторно</button>
+    </div>
+    <div class="road" aria-hidden="true"></div>
+    <svg class="taxi" viewBox="0 0 320 150" role="img" aria-label="GEOCAB такси">
+        <ellipse cx="160" cy="138" rx="140" ry="8" fill="#000" opacity=".18"/>
+        <path d="M20 100 Q22 78 48 74 L92 70 L122 38 Q130 30 144 30 L210 30 Q224 30 234 40 L262 70 L288 76 Q304 80 304 98 L304 112 Q304 120 296 120 L28 120 Q20 120 20 112 Z" fill="#ffc107"/>
+        <path d="M20 100 L304 100 L304 112 Q304 120 296 120 L28 120 Q20 120 20 112 Z" fill="#f0a800"/>
+        <path d="M104 70 L130 42 Q134 38 140 38 L172 38 L172 70 Z" fill="#9fd3ff"/>
+        <path d="M180 38 L208 38 Q216 38 222 44 L248 70 L180 70 Z" fill="#9fd3ff"/>
+        <rect x="172" y="38" width="8" height="32" fill="#ffc107"/>
+        <rect x="290" y="82" width="14" height="10" rx="3" fill="#fff6c2"/>
+        <rect x="20" y="84" width="10" height="9" rx="3" fill="#ff5a5f"/>
+        <rect x="140" y="14" width="64" height="18" rx="5" fill="#1b1f3b"/>
+        <text x="172" y="27" font-family="Arial, sans-serif" font-weight="700" font-size="11" fill="#ffc107" text-anchor="middle">GEOCAB</text>
+        <circle cx="82" cy="120" r="22" fill="#1b1f3b"/><circle cx="82" cy="120" r="10" fill="#c9ccd6"/>
+        <circle cx="246" cy="120" r="22" fill="#1b1f3b"/><circle cx="246" cy="120" r="10" fill="#c9ccd6"/>
+    </svg>
+</main>
+<footer>🚕 GEOCAB · Скопје</footer>
+</body>
+</html>

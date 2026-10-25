@@ -54,7 +54,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'GEOCAB_APP.error_views.MethodNotAllowedMiddleware',
 ]
+
+# Застарена форма (CSRF) -> наша страница „Страницата застарела“ наместо англиската на Django.
+# Другите грешки (400, 403, 404, 500) се шаблоните 400.html ... 500.html (се гледаат кога DEBUG = False).
+CSRF_FAILURE_VIEW = 'GEOCAB_APP.error_views.csrf_failure'
 
 ROOT_URLCONF = 'GEOCAB.urls'
 

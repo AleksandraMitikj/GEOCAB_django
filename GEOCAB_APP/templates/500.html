@@ -1,0 +1,3 @@
+{% extends 'GEOCAB_APP/errors/bare.html' %}
+{% block title %}Грешка на серверот · GEOCAB{% endblock %}
+{% block page %}{% include 'GEOCAB_APP/errors/hero.html' with code='500' scene='engine' actions='reload' stopped=True heading='Моторот застана' text='Нешто тргна наопаку кај нас, не кај вас. Обидете се повторно за неколку минути. Ако бевте среде нарачка на возење, прво проверете „Моето возење“ пред да побарате ново.' %}{% endblock %}

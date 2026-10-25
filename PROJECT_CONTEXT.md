@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT - GEOCAB_django
 
 Резиме на состојбата на проектот, за продолжување на работата во нов chat без објаснување од почеток.
-Последно ажурирано: 22.10.2026 (вечер). Git: гранка `main`; commit „Марката на возилото е посебна од класата…“ е по `19916b3` (push го прави корисничката).
+Последно ажурирано: 23.10.2026. Git: гранка `main` = `origin/main`, последен commit `e9ff2da` (пратен на GitHub, нема непратени промени).
 Сè во овој документ е проверено во кодот, тестовите, базата или Git во моментот на пишување.
 
 ---
@@ -80,12 +80,13 @@ GEOCAB_APP/
   account_views.py        профил („Мои податоци“), промена/заборавена/нова лозинка
   manage_views.py         админ панел /manage/ (dashboard, возачи, возила, возења, пријави, корисници, поставки)
   routing.py              road_distance_km() преку OSRM (lru_cache, SSL контекст со /etc/ssl/cert.pem, timeout 4 s)
+  error_views.py          csrf_failure (CSRF_FAILURE_VIEW), MethodNotAllowedMiddleware (наша 405 наместо празна)
   context_processors.py   notifications (🔔 бројка + init за pop-up), contact (GEOCAB_CONTACT), open_reports
   admin.py                Django /admin/: read-only табели, лозинка->hash, возач преку fn_admin_create_driver
   templatetags/geocab.py  ride_status, message_label (латиница->кирилица), static_v (?v=mtime против кеш)
   management/commands/seed.py   тест податоци (повторливо); тест профили и TEST_PASSWORD на врвот на фајлот
   test_runner.py          GeocabTestRunner: во тест базата ги извршува database/geocab_schema.sql + lookup
-  tests/                  base.py + 5 тест модули (види точка 6)
+  tests/                  base.py + 6 тест модули, error_urls.py (намерни грешки за тест) (види точка 6)
   static/GEOCAB_APP/      geocab.css, geocab_map.js (Leaflet помошник: мапи, рути, Google/Waze линкови), img/*.svg
   templates/GEOCAB_APP/   base.html (мени по улога, pop-up известувања), home, about, login, register,
                           ride_new, ride_current, ride_history, notifications, driver_dashboard, driver_profile,
@@ -95,6 +96,7 @@ database/
   geocab_schema.sql       цела шема (22 табели, индекси, функции, тригери, процедури, views)
   geocab_lookup_data.sql  задолжителни редови: статуси (вкл. report open/resolved), CASH/CARD, 15 пораки, Platform_settings (20%)
   geocab_upgrade.sql      надградба на постара база, секции 1-6 (може да се изврши повеќе пати)
+deploy/errors/50x.html    страница за nginx (502/503/504) кога контејнерот не работи - сè во еден фајл, без Django
 README.md                 опис, инсталација, тестови, тест на телефон (на македонски)
 requirements.txt, .gitignore (.venv, __pycache__, .idea, .DS_Store, db.sqlite3, .env)
 ```
@@ -183,7 +185,7 @@ DataGrip проектот `~/DataGripProjects/default` е поврзан со `g
 ги извршува `database/geocab_schema.sql` и `geocab_lookup_data.sql`, на крај ја брише. `geocab_app` не се допира.
 OSRM е заменет (`mock.patch('GEOCAB_APP.routing._road_km', return_value=Decimal('3.79'))` во `tests/base.py`).
 
-**Последно пуштање (22.10.2026, вечер): 155 тестови - 155 OK, 0 FAIL, 0 ERROR.** (147 претходни пуштени и двапати со `--shuffle` - OK.)
+**Последно пуштање (25.10.2026): 166 тестови - 166 OK, 0 FAIL, 0 ERROR** (~70 s). Нема тестови што паѓаат. (Порано 147 тестови беа пуштени и двапати со `--shuffle` - OK.)
 
 | Модул | Класи (број тестови) |
 |---|---|
@@ -191,6 +193,7 @@ OSRM е заменет (`mock.patch('GEOCAB_APP.routing._road_km', return_value=
 | `test_user_rides.py` (33) | EstimateTest 6, RequestRideTest 9, CancelTest 6, RatingAndHistoryTest 7, NotificationsTest 5 |
 | `test_driver.py` (30) | ShiftTest 7, OfferTest 7, RideStepsTest 8, GpsTest 6, DriverProfileTest 2 |
 | `test_money.py` (20) | CashPaymentTest 3, CommissionTest 4, PayoutAndDebtTest 9, ReportTest 4 |
+| `test_errors.py` (11) | ErrorPagesTest 11 (404 по улога, 500 без база, 400 и непознат домен, 403, CSRF, 405) |
 | `test_manage.py` (42) | ManageDriversTest 10, VehicleBrandTest 8, ManageRidesTest 6, ManageSettingsAndUsersTest 3, DjangoAdminTest 4, DatabaseRulesTest 6, RoutingTest 2, SeedAndTemplatesTest 2, AllLinksTest 1 (обиколка на сите линкови/форми за сите улоги) |
 
 Тестовите **не** покриваат: JavaScript во прелистувач (мапи, GPS, pop-up, Leaflet/OSRM/Nominatim одговори) -
@@ -230,31 +233,56 @@ OSRM е заменет (`mock.patch('GEOCAB_APP.routing._road_km', return_value=
    нова марка се креира автоматски, без дупликати по големи/мали букви), `NewVehicleClassForm` без модел,
    `admin.py`, `manage_views.py`, `views._driver_vehicles`, шаблони (возач, профил, детали, поставки, field.html),
    `seed.py` (CLASSES + CARS со марка), тестови (+8 во `VehicleBrandTest`).
+9. **Звук за известувања - испробан и ВРАТЕН** (23.10.2026): беше додаден `static/GEOCAB_APP/geocab_sound.js`
+   (Web Audio „динг“ за корисник, повторлив звук за понуда кај возач, копче 🔊/🔇, лента „Допрете за звук“).
+   Проблеми: на iPhone немаше звук (Safari отклучува звук само во `touchend`/`click`, а кодот користеше
+   `pointerdown` + async; прекинувачот за тивко ги гаси веб звуците), на лаптоп само еден звук (по
+   `location.reload()` новата страница е „недопрена“ и прелистувачот го блокира звукот). Корисничката одлучи
+   **да нема звук** - сите промени се вратени со `git restore` и фајлот е избришан; ништо од тоа не беше во commit.
+10. **`CLAUDE.md` е само локален**: во `.gitignore`; историјата е преправена (последните commit-и споени во `e9ff2da`,
+    `git push --force-with-lease`) така што `CLAUDE.md` не постои во ниеден commit ни на GitHub.
+11. **Пристап од телефон**: проверено дека работи преку HTTPS тунел (корисничката го проба на iPhone).
+    Пристап преку домашно Wi-Fi (`http://192.168.1.184:8000`, без GPS) бара `ALLOWED_HOSTS` за `192.168.x.x` и
+    `runserver 0.0.0.0:8000` - предложено, **не е направено** (корисничката го користи тунелот).
+12. **Страници за грешки** (25.10.2026, во дизајнот на почетната): шаблони `GEOCAB_APP/templates/400.html`, `403.html`,
+    `403_csrf.html`, `404.html`, `405.html`, `500.html` + `GEOCAB_APP/errors/hero.html` (заеднички изглед, слика
+    `errors/scene_*.html`, копчиња по улога). 403/404/405/CSRF го наследуваат `base.html`; 400/500 се прикажуваат
+    без request/база, затоа наследуваат `errors/bare.html`. Се гледаат само со `DEBUG = False`. Проверени во
+    прелистувач (компјутер и телефон). Многуредов коментар во шаблон = `{% comment %}`, не `{# #}`.
 
 ---
 
 ## 8. Тековна состојба
 
-**Завршено и проверено:** сите функционалности од точка 4; 155/155 тестови. GitHub:
-`https://github.com/AleksandraMitikj/GEOCAB_django` (приватно). Промената за марката и PROJECT_CONTEXT.md
-се во commit по `19916b3`; push го прави корисничката (`git status` покажува дали `main` е пред `origin/main`).
+**Завршено и проверено:** сите функционалности од точка 4; 166/166 тестови. GitHub:
+`https://github.com/AleksandraMitikj/GEOCAB_django` (приватно), `main` = `origin/main` = `e9ff2da`.
+Push работи од овој Mac без прашање за лозинка (macOS ја памти најавата со fine-grained токенот на корисничката,
+важи до 20.01.2027; токенот не е во проектот).
 
 **Отворено, предложено, НЕ е одобрено/направено:**
-- „Возачи-духови“: возач што ја затворил страницата останува на смена (`vozac_marko` беше на смена од 13:42 без GPS
-  од 14:42 и доби понуда пред `vozac_elena`). Предлог: без сигнал >2 мин → без понуди; >30 мин → автоматски крај
-  на смена; „Моја смена“ праќа „жив сум“ на 30 s и без GPS. Чека одобрување.
-- Мапата на `/ride/current/` во статус `requested` (пред возачот да прифати) беше одзумирана (видливи Албанија/Косово)
-  кај корисничката - причината не е истражена.
+- **„Возачи-духови“**: возач што ја затворил страницата останува на смена и добива понуди. Пример: `vozac_marko`
+  е на смена од 22.10.2026 19:33 (повторно); на 22.10 доби понуда пред `vozac_elena` иако неговата страница
+  не беше отворена ~5 часа. Предлог: без сигнал >2 мин → без понуди (`fn_find_nearest_driver`); >30 мин →
+  автоматски крај на смена; „Моја смена“ праќа „жив сум“ на 30 s и без GPS. Чека одобрување.
+- **Одзумирана мапа** на `/ride/current/` во статус `requested` (пред возачот да прифати): кај корисничката се
+  гледаа Албанија/Косово наместо Скопје. Во тој статус се повикува само почетното `GeocabMap.fit(map, [pickup, dropoff], 0.3)`
+  (`update()` не се извршува) - причината не е истражена.
+- Пристап преку Wi-Fi без тунел (точка 7.11).
 
-**Состојба на вистинската база `geocab_app` (22.10.2026):** 22 GEOCAB табели; 4 корисници (`Mit`, `korisnik_ana`,
-`korisnik_petar`, `Iva`), 2 возачи (`vozac_marko`, `vozac_elena`), 1 админ (`admin_test`), 15 возења, 9 плаќања,
-провизија 20%. **`vozac_marko` е на смена** - тест барања во Скопје одат кај него.
+**Состојба на вистинската база `geocab_app` (23.10.2026):** 22 GEOCAB табели; 6 корисници (`Mit`, `korisnik_ana`,
+`korisnik_petar`, `Iva`, `sasomitic`, `Sara`), 2 возачи (`vozac_marko`, `vozac_elena`), 1 админ (`admin_test`),
+21 возење, 13 плаќања, 2 класи (Standard, Premium), 2 возила (SK-1234-AB Standard Škoda Octavia,
+SK-5678-CD Premium Mercedes E-Class), провизија 20%. **`vozac_marko` е на смена** - тест барања со класа
+„Било кое“/Standard во Скопје одат кај него ако е најблизок.
 
 **Одлуки на корисничката (да не се менуваат без прашање):**
 - плаќање **само готовина** (картичка отфрлена);
+- **нема звук за известувања** (испробан и вратен, точка 7.9);
 - пораките од Django (на пр. „This field is required.“) **остануваат на англиски**;
 - нов GEOCAB администратор **останува преку Django `/admin/`** (можно подоцна);
-- Waze со една дестинација (ограничување на Waze) - две копчиња;
+- марката/моделот е на возилото, класата е само Standard/Premium (начин Б, точка 7.8);
+- Waze со една дестинација (ограничување на Waze) - две копчиња; Google Maps со 3 точки;
+- `CLAUDE.md` **не смее да оди на GitHub** (само локален, во `.gitignore`);
 - контакт податоците во `GEOCAB_CONTACT` (`settings.py`) се **пример** (телефон, info@geocab.mk, адреса) - не се вистински.
 
 **Познати ограничувања (не се грешки):**
@@ -262,39 +290,43 @@ OSRM е заменет (`mock.patch('GEOCAB_APP.routing._road_km', return_value=
   (тунел: `ssh -R 80:localhost:8000 nokey@localhost.run` - јавно достапно, со `DEBUG = True`).
 - Корисник и возач не можат да бидат најавени во ист прозорец (иста сесија) → Incognito; најава во друг таб
   ротира CSRF токенот (стара отворена форма дава 403 - освежи).
+- Chrome ги кешира JS/CSS - решено со `{% static_v %}`; по промена на шаблон што е отворен, освежи со ⌘⇧R.
 - OSRM/Nominatim се бесплатни демо сервиси; без OSRM цената е воздушна.
 - Истекувањето понуди нема позадинска задача - се случува при отворање/полирање на страница.
+- „Моја смена“ и „Моето возење“ се освежуваат со `location.reload()` (затоа звукот не можеше да работи стабилно).
 - Не е подготвено за јавен сервер: `DEBUG = True`, `SECRET_KEY` во `settings.py`, нема `STATIC_ROOT`.
 - `LANGUAGE_CODE = 'en-us'`.
 
 **Испробани начини за проверка:** привремена копија од базата (`pg_dump` → `geocab_visual_tmp`) и сервер
 `GEOCAB_DB=geocab_visual_tmp python manage.py runserver 127.0.0.1:8765` за рачна проверка во прелистувач без
-да се полни `geocab_app`; два различни хоста (`127.0.0.1` и `localhost`) за две сесии (возач и корисник);
-бекапи пред секоја промена на базата (`pg_dump -Fc`).
+да се полни `geocab_app` (по проверката: `dropdb geocab_visual_tmp`); два различни хоста (`127.0.0.1` и
+`localhost`) за две сесии (возач и корисник); бекапи пред секоја промена на базата (`pg_dump -Fc`).
 
-Нема отворени грешки што се познати во моментот.
+Нема познати грешки во кодот што се откриени, а не се поправени - освен одзумираната мапа погоре (неистражена).
 
 ---
 
 ## 9. Следни чекори
 
-Корисничката не одлучила за следната задача. Отворени можности (од досегашните разговори):
-1. Рачна проба на телефон преку тунелот (GPS, Google Maps/Waze) - тест од корисничката.
-2. Опционално: управување со GEOCAB администратори во `/manage/` (отложено со одлука).
-3. Опционално: подготовка за јавен сервер (`DEBUG=False`, клуч од env, `STATIC_ROOT`/collectstatic).
-4. Опционално: вистински контакт податоци во `GEOCAB_CONTACT`.
-5. По секоја промена: тестови → commit → `git push` (токен на корисничката; не се чува во проектот).
+Корисничката не одлучила за следната задача. Отворени можности, по редослед на важност:
+1. „Возачи-духови“ (предлогот во точка 8) - чека одобрување.
+2. Истражување и поправка на одзумираната мапа на `/ride/current/` во статус `requested`.
+3. Опционално: пристап преку Wi-Fi (`ALLOWED_HOSTS` за `192.168.x.x`).
+4. Опционално: управување со GEOCAB администратори во `/manage/` (отложено со одлука).
+5. Опционално: подготовка за јавен сервер (`DEBUG=False`, клуч од env, `STATIC_ROOT`/collectstatic).
+6. Опционално: вистински контакт податоци во `GEOCAB_CONTACT`.
+7. По секоја промена: тестови → commit → push (само со дозвола на корисничката; `CLAUDE.md` никогаш во commit).
 
 ---
 
 ## 10. Инструкции за следниот chat
 
-**Прочитај прво:** `PROJECT_CONTEXT.md` (ова), `README.md`, `GEOCAB_APP/db.py`, `GEOCAB_APP/models.py`,
+**Прочитај прво:** `PROJECT_CONTEXT.md` (ова; `CLAUDE.md` постои само локално и се вчитува автоматски), `README.md`, `GEOCAB_APP/db.py`, `GEOCAB_APP/models.py`,
 `GEOCAB_APP/auth.py`, па фајлот што се менува (`views.py` / `manage_views.py` / `account_views.py` / шаблонот).
 За база: `database/geocab_schema.sql` (барај по име на функција/процедура).
 
 **Пред да менуваш код провери:**
-- `git status` (чисто ли е), `python manage.py check`, `python manage.py test GEOCAB_APP` (треба 147 OK).
+- `git status` (чисто ли е), `python manage.py check`, `python manage.py test GEOCAB_APP` (треба 166 OK).
 - Дали Postgres.app работи (`pg_isready -h localhost`).
 
 **Правила за работа во овој проект:**
