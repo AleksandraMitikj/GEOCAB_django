@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT - GEOCAB_django
 
 Резиме на состојбата на проектот, за продолжување на работата во нов chat без објаснување од почеток.
-Последно ажурирано: 23.10.2026. Git: гранка `main` = `origin/main`, последен commit `e9ff2da` (пратен на GitHub, нема непратени промени).
+Последно ажурирано: 10.11.2026. Git: гранка `main` = `origin/main`; последниот commit ги содржи плаќањето со картичка (7.13) и потврдата на е-пошта (7.14).
 Сè во овој документ е проверено во кодот, тестовите, базата или Git во моментот на пишување.
 
 ---
@@ -14,8 +14,8 @@
 (процентот се менува во поставки).
 
 Три улоги:
-- **Корисник (патник)** - бара возење на мапа, следи го возачот во живо, плаќа **само во готовина**, оценува.
-- **Возач** - смена со GPS, прима понуди, го вози корисникот, наплаќа готовина, должи провизија на GEOCAB.
+- **Корисник (патник)** - бара возење на мапа, следи го возачот во живо, плаќа **во готовина или со картичка** (избира при барањето), оценува.
+- **Возач** - смена со GPS, прима понуди, го вози корисникот, наплаќа готовина (должи провизија) или чека плаќање со картичка (GEOCAB му го должи неговиот дел) - пребивање.
 - **Администратор** (вработен во GEOCAB) - панел `/manage/`: возачи, возила, провизија, возења, поставки, пријави.
 
 Покрај тоа, **Django `/admin/`** (superuser од `createsuperuser`, табела `auth_user`) е за развивачот/сопственикот.
@@ -44,10 +44,10 @@
 Миграциите `0001`-`0004` во `GEOCAB_APP/migrations/` се само за состојбата на Django (unmanaged модели, 0 DDL).
 `python manage.py migrate` креира само Django табели (auth, sessions, admin, contenttypes) во истата база.
 
-**Табели (22)** во `geocab_app`: `status`, `vehicles_model`, `locations`, `users`, `admins`, `drivers`,
+**Табели (25)** во `geocab_app`: `status`, `vehicles_model`, `locations`, `users`, `admins`, `drivers`,
 `vehicle_types`, `vehicle_ownership`, `drivers_vehicle_ownership`, `active_drivers`, `pricing_rules`, `rides`,
 `ride_rejections`, `messages`, `notifications`, `payment_methods`, `platform_settings`, `payments`, `ratings`,
-`cancellations`, `commission_payouts`, `ride_reports`.
+`cancellations`, `commission_payouts`, `ride_reports`, `driver_payouts`, `card_transactions`, `pending_registrations`.
 
 Главни врски: `rides` → `users`, `drivers` (NULL додека нема возач), `vehicle_ownership`, `locations`
 (pickup/dropoff), `status`. `payments`/`cancellations`/`ratings`/`notifications`/`ride_rejections`/`ride_reports`
@@ -71,10 +71,12 @@ GEOCAB/settings.py        поставки (база, временска зон�
 GEOCAB/urls.py            '' -> GEOCAB_APP.urls, 'admin/' -> Django admin
 GEOCAB_APP/
   models.py               unmanaged модели (+ GeneratedField за platform_amount/driver_amount)
+  mail_backend.py         ReadableConsoleEmailBackend: во развој мејлот се печати читливо во терминалот
+  card_gateway.py         ДЕМО платежна порта: Luhn, тип (VISA/MASTERCARD/...), charge() -> CardResult; тест картички
   db.py                   SQL обвивки, OFFER_TIMEOUT_SECONDS = 5*60, REPORT_CATEGORIES, driver_debt_status(), MONTHS_MK
   auth.py                 најава/сесија, role_required, лозинки (set_password, reset токен со django.core.signing, 1 час)
   forms.py                Register/Login/Ride/DriverLocation/NewDriver/Vehicle/VehicleChoice/Payout/Commission/
-                          Price/NewVehicleClass/ChangePassword/ForgotPassword/NewPassword/AdminSetPassword, profile_form()
+                          Price/NewVehicleClass/ChangePassword/ForgotPassword/NewPassword/AdminSetPassword/CardPayment, profile_form()
   views.py                јавни страници, регистрација/најава, корисник (возење, историја, известувања, оценка,
                           пријава), возач (смена, акции, GPS, профил), плаќање (_unpaid, _driver_to_collect)
   account_views.py        профил („Мои податоци“), промена/заборавена/нова лозинка
@@ -86,22 +88,22 @@ GEOCAB_APP/
   templatetags/geocab.py  ride_status, message_label (латиница->кирилица), static_v (?v=mtime против кеш)
   management/commands/seed.py   тест податоци (повторливо); тест профили и TEST_PASSWORD на врвот на фајлот
   test_runner.py          GeocabTestRunner: во тест базата ги извршува database/geocab_schema.sql + lookup
-  tests/                  base.py + 6 тест модули, error_urls.py (намерни грешки за тест) (види точка 6)
+  tests/                  base.py + 7 тест модули, error_urls.py (намерни грешки за тест) (види точка 6)
   static/GEOCAB_APP/      geocab.css, geocab_map.js (Leaflet помошник: мапи, рути, Google/Waze линкови), img/*.svg
   templates/GEOCAB_APP/   base.html (мени по улога, pop-up известувања), home, about, login, register,
-                          ride_new, ride_current, ride_history, notifications, driver_dashboard, driver_profile,
+                          ride_new, ride_current, ride_history, pay_card, notifications, driver_dashboard, driver_profile,
                           account/*, manage/*, partials/* (field, route_map, report_problem, debt_banner,
                           driver_location, manage/partials/vehicle_choice)
 database/
-  geocab_schema.sql       цела шема (22 табели, индекси, функции, тригери, процедури, views)
+  geocab_schema.sql       цела шема (25 табели, индекси, функции, тригери, процедури, views)
   geocab_lookup_data.sql  задолжителни редови: статуси (вкл. report open/resolved), CASH/CARD, 15 пораки, Platform_settings (20%)
-  geocab_upgrade.sql      надградба на постара база, секции 1-6 (може да се изврши повеќе пати)
+  geocab_upgrade.sql      надградба на постара база, секции 1-8 (може да се изврши повеќе пати)
 deploy/errors/50x.html    страница за nginx (502/503/504) кога контејнерот не работи - сè во еден фајл, без Django
 README.md                 опис, инсталација, тестови, тест на телефон (на македонски)
 requirements.txt, .gitignore (.venv, __pycache__, .idea, .DS_Store, db.sqlite3, .env)
 ```
 
-SQL фајловите постојат и на `~/Desktop/geocab_fajlovi/` (во моментот **идентични** со `database/`).
+SQL фајловите постојат и на `~/Desktop/geocab_fajlovi/`. **Од 10.11.2026 `geocab_schema.sql` и `geocab_upgrade.sql` на Desktop се ЗАСТАРЕНИ** (без картичка) - копирањето го прави корисничката (`cp database/geocab_schema.sql database/geocab_upgrade.sql ~/Desktop/geocab_fajlovi/`).
 DataGrip проектот `~/DataGripProjects/default` е поврзан со `geocab_app@localhost` и ги отвора фајловите од Desktop.
 **Главен извор е `database/` во проектот** (тестовите и Git го користат).
 
@@ -111,8 +113,11 @@ DataGrip проектот `~/DataGripProjects/default` е поврзан со `g
 
 ### Јавно
 - `/` почетна (херо со анимирано такси, бројки од базата, калкулатор на цена со вистинските цени и попуст >10 km,
-  „Само готовина“, секција за возачи со % од поставките, ЧПП), `/about/` (контакт од `GEOCAB_CONTACT`).
-- `/register/` (само корисници), `/login/` (избор улога), одјава само со POST.
+  „Готовина или картичка“, секција за возачи со % од поставките, ЧПП), `/about/` (контакт од `GEOCAB_CONTACT`).
+- `/register/` (само корисници) **со потврда на е-пошта**: барањето чека во `Pending_registrations`, мејл со линк
+  (`/register/confirm/<токен>/`, важи 24 h, страница со копче „Потврди“ - POST), профилот во `Users` се креира дури
+  по потврдата (`fn_confirm_registration`); `/register/sent/`, `/register/resend/` (нов линк, стариот не важи);
+  најава пред потврда -> „Профилот уште не е активиран“. `/login/` (избор улога), одјава само со POST.
 - `/password/forgot/` (линк по мејл; во развој мејлот се печати во терминалот на runserver - `console.EmailBackend`
   преку `MAILERS` во settings), `/password/reset/<token>/` (важи 1 час, еднаш).
 
@@ -164,8 +169,9 @@ DataGrip проектот `~/DataGripProjects/default` е поврзан со `g
 | Казна (корисник): requested 0, accepted 50% од почетната, driver_arrived 100%; no-show (возач, по пристигнување) 100%; возач/админ 0 | `fn_cancellation_fee`, `sp_cancel_ride` |
 | Возач што се откажува: возењето оди кај друг возач (DRIVER_CANCELLED) | `sp_cancel_ride` |
 | `cancelled_by_type` е 'USER'/'DRIVER'/'ADMIN' (големи букви) | CHECK `chk_cancelled_by_type` |
-| Плаќање само **готовина** (одлука на корисничката); плаќање се креира `pending` при completed / казна > 0; возачот потврдува | `trg_create_payment`, `trg_apply_cancellation`, `sp_process_payment` |
-| Казна се наплаќа со **следното** завршено возење на корисникот (кој било возач); заработката од казната е на возачот на откажаното возење | `views._driver_to_collect` |
+| Плаќање **готовина или картичка** (од 10.11.2026). Корисникот бира при барањето (`Rides.payment_method_id`, стандардно CASH); плаќање се креира `pending` со тој начин при completed / казна > 0. Готовина: возачот потврдува. Картичка: `/pay/card/` ги плаќа сите неплатени износи (возење + казни) преку `card_gateway.charge`; одбиена -> `failed`, може повторно или готовина. Во `Card_transactions` само тип + последни 4 цифри, никогаш цел број/CVV | `trg_create_payment`, `trg_apply_cancellation`, `sp_process_payment`, `views.pay_card` |
+| **Пребивање** возач - GEOCAB: салдо = провизија од готовина - дел на возачот од картички - уплати на возачот (`Commission_payouts`) + исплати од GEOCAB (`Driver_payouts`). > 0 возачот должи (рокови/блокада како досега, заработката од картички се смета како уплата, FIFO); < 0 GEOCAB должи -> админ „Исплати на возачот“ (≤ долгот) | `vw_driver_commission_balance`, `fn_driver_debt_status`, `sp_record_driver_payout` |
+| Казна се наплаќа веднаш со картичка или со **следното** завршено возење на корисникот (кој било возач); заработката од казната е на возачот на откажаното возење | `views._driver_to_collect` |
 | Провизија: % од `Platform_settings` се запишува на секое ново плаќање; `platform_amount`/`driver_amount` се генерирани колони; промена важи само за нови плаќања; `refunded` не се брои | `trg_payment_commission`, `Payments` |
 | Долг за месец М (по `payment_time`): 1-14 во М+1 „во рок“, од 15 во М+1 **опомена** (рок 1 во М+2), од 1 во М+2 **блокада** (не почнува смена, не добива понуди) додека не плати; уплатите покриваат најстар месец прв (FIFO) | `fn_driver_debt_status`, `sp_driver_start_shift`, `fn_find_nearest_driver` |
 | Уплата на провизија: активен админ, износ > 0 и ≤ долг | `sp_record_commission_payout` |
@@ -185,14 +191,15 @@ DataGrip проектот `~/DataGripProjects/default` е поврзан со `g
 ги извршува `database/geocab_schema.sql` и `geocab_lookup_data.sql`, на крај ја брише. `geocab_app` не се допира.
 OSRM е заменет (`mock.patch('GEOCAB_APP.routing._road_km', return_value=Decimal('3.79'))` во `tests/base.py`).
 
-**Последно пуштање (25.10.2026): 166 тестови - 166 OK, 0 FAIL, 0 ERROR** (~70 s). Нема тестови што паѓаат. (Порано 147 тестови беа пуштени и двапати со `--shuffle` - OK.)
+**Последно пуштање (10.11.2026): 199 тестови - 199 OK, 0 FAIL, 0 ERROR** (~90 s). Нема тестови што паѓаат. (Порано 147 тестови беа пуштени и двапати со `--shuffle` - OK.)
 
 | Модул | Класи (број тестови) |
 |---|---|
-| `test_accounts.py` (30) | PublicPagesTest 5, RegisterTest 5, LoginTest 7, RoleProtectionTest 3, PasswordTest 6, ProfileTest 4 |
+| `test_accounts.py` (41) | PublicPagesTest 5, RegisterTest 16 (потврда на е-пошта), LoginTest 7, RoleProtectionTest 3, PasswordTest 6, ProfileTest 4 |
 | `test_user_rides.py` (33) | EstimateTest 6, RequestRideTest 9, CancelTest 6, RatingAndHistoryTest 7, NotificationsTest 5 |
 | `test_driver.py` (30) | ShiftTest 7, OfferTest 7, RideStepsTest 8, GpsTest 6, DriverProfileTest 2 |
 | `test_money.py` (20) | CashPaymentTest 3, CommissionTest 4, PayoutAndDebtTest 9, ReportTest 4 |
+| `test_card.py` (22) | CardGatewayTest 3, CardPaymentTest 12 (избор, плаќање, одбиена → готовина, бројот не се чува, казна со картичка, двојно плаќање), NettingTest 7 (пребивање, блокада, исплата, враќање пари, dashboard) |
 | `test_errors.py` (11) | ErrorPagesTest 11 (404 по улога, 500 без база, 400 и непознат домен, 403, CSRF, 405) |
 | `test_manage.py` (42) | ManageDriversTest 10, VehicleBrandTest 8, ManageRidesTest 6, ManageSettingsAndUsersTest 3, DjangoAdminTest 4, DatabaseRulesTest 6, RoutingTest 2, SeedAndTemplatesTest 2, AllLinksTest 1 (обиколка на сите линкови/форми за сите улоги) |
 
@@ -249,13 +256,30 @@ OSRM е заменет (`mock.patch('GEOCAB_APP.routing._road_km', return_value=
     `errors/scene_*.html`, копчиња по улога). 403/404/405/CSRF го наследуваат `base.html`; 400/500 се прикажуваат
     без request/база, затоа наследуваат `errors/bare.html`. Се гледаат само со `DEBUG = False`. Проверени во
     прелистувач (компјутер и телефон). Многуредов коментар во шаблон = `{% comment %}`, не `{# #}`.
+13. **Плаќање со картичка + пребивање** (10.11.2026, барање на професорката): база секција 7 (`Rides.payment_method_id`,
+    `Card_transactions`, `Driver_payouts`, `fn_request_ride(..., p_payment_tip)`, `sp_process_payment(..., p_card_brand,
+    p_card_last4)`, `sp_record_driver_payout`, нови колони на крајот на `vw_ride_details`, `vw_driver_pending_requests`,
+    `vw_user_ride_history`, `vw_payment_history`, `vw_driver_earnings_summary`, `vw_driver_commission_balance`,
+    `vw_admin_dashboard`). Во `geocab_upgrade.sql` секциите 1, 2 и 6 сега прават `DROP VIEW IF EXISTS ... CASCADE` +
+    `CREATE VIEW` за овие view-а (повторно извршување не смее да падне поради помалку колони; секција 7 ги враќа).
+    Надградбата е пробана 2x на копија од бекапот и споредена со свежа инсталација (разлики само Django табели и
+    стар запис на CHECK). Django: `card_gateway.py`, `CardPaymentForm`, `/pay/card/` (`sensitive_post_parameters`,
+    бројот не се враќа во формата), избор на начин во `/ride/new/`, приказ кај возач/корисник/админ, „Исплати на
+    возачот“, текстови на почетна/„За нас“. Демо тест картички: 4242 4242 4242 4242 (одобрено), 4000 0000 0000 0002 (одбиено).
+14. **Потврда на е-пошта при регистрација** (10.11.2026, корисничката - доказ за професорката): база секција 8
+    (`Pending_registrations` со hash од токенот (SHA-256) и од лозинката, `fn_create_pending_registration`,
+    `fn_renew_pending_registration`, `fn_confirm_registration`); `geocab_app` надградена (бекап
+    `~/geocab_backups/geocab_app_pred_potvrda_email_20261110_2307.dump`). Регистрацијата е преместена од `views.py`
+    во `account_views.py`. Мејл: текст + HTML (`templates/GEOCAB_APP/emails/confirm_email.*`). Засега само во
+    терминалот (одлука на корисничката); Gmail се вклучува преку env без промена на кодот. Постоечките корисници
+    не се засегнати. Познато: промена на е-пошта во „Мои податоци“ уште не бара потврда.
 
 ---
 
 ## 8. Тековна состојба
 
-**Завршено и проверено:** сите функционалности од точка 4; 166/166 тестови. GitHub:
-`https://github.com/AleksandraMitikj/GEOCAB_django` (приватно), `main` = `origin/main` = `e9ff2da`.
+**Завршено и проверено:** сите функционалности од точка 4; 199/199 тестови. GitHub:
+`https://github.com/AleksandraMitikj/GEOCAB_django` (приватно), `main` = `origin/main` (види `git log`).
 Push работи од овој Mac без прашање за лозинка (macOS ја памти најавата со fine-grained токенот на корисничката,
 важи до 20.01.2027; токенот не е во проектот).
 
@@ -269,14 +293,14 @@ Push работи од овој Mac без прашање за лозинка (m
   (`update()` не се извршува) - причината не е истражена.
 - Пристап преку Wi-Fi без тунел (точка 7.11).
 
-**Состојба на вистинската база `geocab_app` (23.10.2026):** 22 GEOCAB табели; 6 корисници (`Mit`, `korisnik_ana`,
+**Состојба на вистинската база `geocab_app` (10.11.2026):** 24 GEOCAB табели (надградена со секција 7, бекап пред тоа: `~/geocab_backups/geocab_app_pred_kartichka_20261110_2044.dump`); провизија во поставките **30%**; 7 корисници, 22 возења, 14 плаќања. На 23.10: 6 корисници (`Mit`, `korisnik_ana`,
 `korisnik_petar`, `Iva`, `sasomitic`, `Sara`), 2 возачи (`vozac_marko`, `vozac_elena`), 1 админ (`admin_test`),
 21 возење, 13 плаќања, 2 класи (Standard, Premium), 2 возила (SK-1234-AB Standard Škoda Octavia,
 SK-5678-CD Premium Mercedes E-Class), провизија 20%. **`vozac_marko` е на смена** - тест барања со класа
 „Било кое“/Standard во Скопје одат кај него ако е најблизок.
 
 **Одлуки на корисничката (да не се менуваат без прашање):**
-- плаќање **само готовина** (картичка отфрлена);
+- плаќање **готовина или картичка** (10.11.2026, по забелешка на професорката; порано само готовина). Картичката оди преку **демо порта** (`card_gateway.py`) додека нема договор со банка; **пребивање** возач - GEOCAB;
 - **нема звук за известувања** (испробан и вратен, точка 7.9);
 - пораките од Django (на пр. „This field is required.“) **остануваат на англиски**;
 - нов GEOCAB администратор **останува преку Django `/admin/`** (можно подоцна);
@@ -309,12 +333,14 @@ SK-5678-CD Premium Mercedes E-Class), провизија 20%. **`vozac_marko` е
 ## 9. Следни чекори
 
 Корисничката не одлучила за следната задача. Отворени можности, по редослед на важност:
+0. Поставување на домашниот Debian сервер (Docker: PostGIS + gunicorn, постоечки nginx, Let's Encrypt на free DNS домен, копија од `geocab_app`; `deploy/errors/50x.html` е готов) - планот е договорен, фајловите уште не се направени.
 1. „Возачи-духови“ (предлогот во точка 8) - чека одобрување.
 2. Истражување и поправка на одзумираната мапа на `/ride/current/` во статус `requested`.
 3. Опционално: пристап преку Wi-Fi (`ALLOWED_HOSTS` за `192.168.x.x`).
 4. Опционално: управување со GEOCAB администратори во `/manage/` (отложено со одлука).
 5. Опционално: подготовка за јавен сервер (`DEBUG=False`, клуч од env, `STATIC_ROOT`/collectstatic).
 6. Опционално: вистински контакт податоци во `GEOCAB_CONTACT`.
+6a. При продажба: вистинска платежна порта (на пр. CaSys/cPay преку банка) - се менува само `card_gateway.charge()`.
 7. По секоја промена: тестови → commit → push (само со дозвола на корисничката; `CLAUDE.md` никогаш во commit).
 
 ---
@@ -344,4 +370,6 @@ SK-5678-CD Premium Mercedes E-Class), провизија 20%. **`vozac_marko` е
   JS/CSS со `{% static_v '...' %}`; полиња со `partials/field.html`.
 - Нова функционалност → нов тест во `GEOCAB_APP/tests/` (користи `GeocabTestCase` од `tests/base.py`).
 - Не менувај текстови во табелата `Messages`; не ги враќај одлуките од точка 8 без прашање.
+- Мејлови во развој: се печатат читливо во терминалот на runserver (`mail_backend.py`). Вистински мејл: env
+  `GEOCAB_SMTP_USER` + `GEOCAB_SMTP_PASSWORD` (Gmail App password, само во `.env`, никогаш во кодот/chat).
 - Тест профили: `GEOCAB_APP/management/commands/seed.py` (лозинката не ја пишувај во chat/документи).

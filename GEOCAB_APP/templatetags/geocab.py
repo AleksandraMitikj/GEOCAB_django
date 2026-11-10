@@ -32,3 +32,19 @@ def static_v(path):
     url = static(path)
     found = finders.find(path)
     return f'{url}?v={int(os.path.getmtime(found))}' if found else url
+
+
+PAYMENT_METHODS = {'CASH': '💵 Готовина', 'CARD': '💳 Картичка'}
+
+
+@register.filter
+def pay_method(value):
+    """CASH -> 💵 Готовина"""
+    return PAYMENT_METHODS.get(value, value)
+
+
+@register.filter
+def card_brand(value):
+    """VISA -> Visa"""
+    from GEOCAB_APP.card_gateway import BRAND_LABELS
+    return BRAND_LABELS.get(value, value)

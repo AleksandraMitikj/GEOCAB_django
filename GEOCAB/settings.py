@@ -140,11 +140,31 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+# Во развој мејловите (потврда на е-пошта, нова лозинка) се печатат во терминалот на runserver.
+# За вистински мејл (на пр. на серверот) се поставуваат GEOCAB_SMTP_USER и GEOCAB_SMTP_PASSWORD
+# во околината (.env, никогаш во кодот) - за Gmail: адресата и „App password“ од Google профилот.
+SMTP_USER = os.environ.get('GEOCAB_SMTP_USER')
+if SMTP_USER and os.environ.get('GEOCAB_SMTP_PASSWORD'):
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+            'OPTIONS': {
+                'host': os.environ.get('GEOCAB_SMTP_HOST', 'smtp.gmail.com'),
+                'port': int(os.environ.get('GEOCAB_SMTP_PORT', '587')),
+                'username': SMTP_USER,
+                'password': os.environ['GEOCAB_SMTP_PASSWORD'],
+                'use_tls': True,
+                'timeout': 10,
+            },
+        },
+    }
+else:
+    MAILERS = {
+        'default': {
+            'BACKEND': 'GEOCAB_APP.mail_backend.ReadableConsoleEmailBackend',   # читливо, со кирилица
+        },
+    }
+DEFAULT_FROM_EMAIL = f'GEOCAB <{SMTP_USER or "no-reply@geocab.mk"}>'
 
 
 # Контакт податоци на GEOCAB (футер и страницата „За нас“) - сменете ги со вистинските

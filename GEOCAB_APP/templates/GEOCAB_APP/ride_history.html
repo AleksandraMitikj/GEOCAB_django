@@ -1,4 +1,5 @@
 {% extends 'GEOCAB_APP/base.html' %}
+{% load geocab %}
 
 {% block title %}Мои возења - GEOCAB{% endblock %}
 
@@ -41,9 +42,11 @@
                         казна {{ r.cancellation_fee }} ден.
                     {% endif %}
                     {% if r.payment_status == 'completed' %}
-                        <span class="badge text-bg-light border ms-1">✓ платено</span>
-                    {% elif r.payment_status == 'pending' %}
-                        <span class="badge text-bg-warning ms-1">чека плаќање</span>
+                        <span class="badge text-bg-light border ms-1">✓ платено
+                            {% if r.card_last4 %}💳 •••• {{ r.card_last4 }}{% elif r.payment_method == 'CASH' %}💵{% endif %}</span>
+                    {% elif r.payment_status == 'pending' or r.payment_status == 'failed' %}
+                        <span class="badge text-bg-warning ms-1">{% if r.payment_status == 'failed' %}картичката не помина{% else %}чека плаќање{% endif %}</span>
+                        <a href="{% url 'pay_card' %}" class="btn btn-sm btn-outline-dark ms-1">💳 Плати</a>
                     {% elif r.payment_status == 'refunded' %}
                         <span class="badge text-bg-info ms-1">вратено</span>
                     {% endif %}

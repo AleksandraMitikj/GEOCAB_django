@@ -1,11 +1,12 @@
-"""Јавни страници, регистрација, најава/одјава, заштита по улога, лозинки и профил."""
+"""Јавни страници, регистрација со потврда на е-пошта, најава/одјава, заштита по улога, лозинки и профил."""
 import re
+from datetime import datetime, timedelta
 
 from django.contrib.auth.hashers import check_password
 from django.core import mail
 from django.test import Client
 
-from GEOCAB_APP.models import Drivers, Users
+from GEOCAB_APP.models import Drivers, PendingRegistrations, Users
 
 from .base import PASSWORD, GeocabTestCase, field_errors, messages_of, status
 
@@ -18,10 +19,10 @@ class PublicPagesTest(GeocabTestCase):
         for url in ('/', '/about/', '/login/', '/register/', '/password/forgot/'):
             self.assertEqual(Client().get(url).status_code, 200, url)
 
-    def test_home_shows_cash_only_and_real_prices(self):
+    def test_home_shows_cash_or_card_and_real_prices(self):
         html = Client().get('/').content.decode()
-        self.assertIn('Плаќање само во готовина', html)
-        self.assertNotIn('картичка', html.lower().replace('без картички', ''))
+        self.assertIn('Готовина или 💳 картичка', html)
+        self.assertNotIn('само во готовина', html.lower())
         self.assertIn('data-base="100.0"', html)      # Standard почетна цена од базата
         self.assertIn('data-per-km="60.0"', html)     # Premium цена по km
 
@@ -46,14 +47,130 @@ class PublicPagesTest(GeocabTestCase):
 
 
 class RegisterTest(GeocabTestCase):
-    def test_register_creates_active_user_and_logs_in(self):
-        client = Client()
-        response = client.post('/register/', REGISTER, follow=True)
+    """Регистрација со потврда на е-пошта: профилот се креира дури по кликот на линкот од мејлот."""
+
+    def register(self, client=None, **overrides):
+        client = client or Client()
+        response = client.post('/register/', {**REGISTER, **overrides}, follow=True)
+        return client, response
+
+    def confirm_link(self, message=None):
+        message = message or mail.outbox[-1]
+        return re.search(r'https?://testserver(/register/confirm/[^/\s]+/)', message.body).group(1)
+
+    def test_register_sends_email_and_creates_nothing_yet(self):
+        client, response = self.register()
+        self.assertIn('Ви испративме мејл на <strong>ana.new@test.mk</strong>', response.content.decode())
+        self.assertFalse(Users.objects.filter(username='ana_new').exists())
+        pending = PendingRegistrations.objects.get(username='ana_new')
+        self.assertTrue(check_password('Geocab2026!nova', pending.password_hash))
+        self.assertNotIn('geocab', client.session)                       # не е најавен
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual((message.to, message.subject), (['ana.new@test.mk'], 'GEOCAB - потврдете ја е-поштата'))
+        self.assertIn('Здраво Ана Петрова', message.body)
+        self.assertIn('Потврди е-пошта', message.alternatives[0].content)   # HTML верзија со копче
+        # во базата е само hash од токенот, не токенот од линкот
+        token = self.confirm_link().split('/')[-2]
+        self.assertNotEqual(pending.token_hash, token)
+        self.assertEqual(len(pending.token_hash), 64)
+
+    def test_confirm_creates_active_user_and_logs_in(self):
+        client, _ = self.register()
+        link = self.confirm_link()
+        page = client.get(link)
+        self.assertContains(page, 'Потврди е-пошта')
+        self.assertFalse(Users.objects.filter(username='ana_new').exists())   # GET само ја прикажува страницата
+        response = client.post(link, follow=True)
         user = Users.objects.get(username='ana_new')
         self.assertEqual(user.status.status_text, 'active')
         self.assertTrue(check_password('Geocab2026!nova', user.password_hash))
-        self.assertIn('Ана Петрова', response.content.decode())
+        self.assertIn('Е-поштата е потврдена. Добредојдовте, Ана Петрова! Профилот е креиран.', messages_of(response))
         self.assertEqual(client.session['geocab']['role'], 'user')
+        self.assertFalse(PendingRegistrations.objects.exists())
+
+    def test_link_works_only_once(self):
+        client, _ = self.register()
+        link = self.confirm_link()
+        client.post(link)
+        response = Client().post(link, follow=True)
+        self.assertTrue(any('Линкот не е важечки или профилот е веќе активиран' in m for m in messages_of(response)))
+        self.assertEqual(Users.objects.filter(username='ana_new').count(), 1)
+
+    def test_wrong_token(self):
+        response = Client().get('/register/confirm/losh-token/', follow=True)
+        self.assertTrue(any('Линкот не е важечки' in m for m in messages_of(response)))
+
+    def test_expired_link(self):
+        client, _ = self.register()
+        PendingRegistrations.objects.update(expires_at=datetime.now() - timedelta(minutes=1))
+        link = self.confirm_link()
+        response = client.get(link, follow=True)
+        self.assertIn('Линкот истече. Побарајте нов линк или регистрирајте се повторно.', messages_of(response))
+        response = client.post(link, follow=True)
+        self.assertIn('Линкот истече. Регистрирајте се повторно.', messages_of(response))
+        self.assertFalse(Users.objects.filter(username='ana_new').exists())
+
+    def test_resend_gives_new_link_and_old_stops_working(self):
+        client, _ = self.register()
+        old_link = self.confirm_link()
+        response = client.post('/register/resend/', {'email': 'ana.new@test.mk'}, follow=True)
+        self.assertTrue(any('испративме нов линк' in m for m in messages_of(response)))
+        new_link = self.confirm_link()
+        self.assertNotEqual(old_link, new_link)
+        self.assertEqual(len(mail.outbox), 2)
+        Client().post(old_link)
+        self.assertFalse(Users.objects.filter(username='ana_new').exists())
+        Client().post(new_link)
+        self.assertTrue(Users.objects.filter(username='ana_new').exists())
+
+    def test_resend_for_unknown_email_does_not_reveal_anything(self):
+        response = Client().post('/register/resend/', {'email': 'nema@test.mk'}, follow=True)
+        self.assertTrue(any('Ако има регистрација што чека потврда' in m for m in messages_of(response)))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_register_again_with_same_email_replaces_old_request(self):
+        self.register()
+        self.register(name='Ана Нова')
+        self.assertEqual(PendingRegistrations.objects.get(email='ana.new@test.mk').name, 'Ана Нова')
+
+    def test_username_reserved_by_other_pending_registration(self):
+        self.register()
+        _, response = self.register(email='druga@test.mk', phone='070999888')
+        self.assertIn('Корисничкото име ana_new е резервирано за друга регистрација што чека потврда',
+                      response.content.decode())
+        self.assertEqual(PendingRegistrations.objects.count(), 1)
+
+    def test_taken_in_the_meantime(self):
+        client, _ = self.register()
+        Users.objects.create(name='Друг', username='ana_new', phone='071000000', email='drug@test.mk',
+                             password_hash='x', status=status('user', 'active'))
+        response = client.post(self.confirm_link(), follow=True)
+        self.assertTrue(any('веќе ги користи друг профил' in m for m in messages_of(response)))
+
+    def test_login_before_confirmation(self):
+        self.register()
+        response = Client().post('/login/', {'role': 'user', 'username': 'ana_new', 'password': 'Geocab2026!nova'})
+        self.assertContains(response, 'Профилот уште не е активиран')
+        # со погрешна лозинка не се открива дека постои регистрација
+        response = Client().post('/login/', {'role': 'user', 'username': 'ana_new', 'password': 'pogreshna'})
+        self.assertContains(response, 'Погрешно корисничко име или лозинка.')
+
+    def test_console_email_is_readable(self):
+        """Во развој мејлот се печати во терминалот читливо (кирилица и линк, без base64)."""
+        import io
+        from django.core.mail import EmailMultiAlternatives
+        from GEOCAB_APP.mail_backend import ReadableConsoleEmailBackend
+        stream = io.StringIO()
+        message = EmailMultiAlternatives('GEOCAB - потврдете ја е-поштата', 'Здраво Ана,\nhttp://x/register/confirm/abc/',
+                                         'GEOCAB <no-reply@geocab.mk>', ['ana@test.mk'])
+        message.attach_alternative('<b>HTML</b>', 'text/html')
+        ReadableConsoleEmailBackend(stream=stream, alias='default').send_messages([message])
+        out = stream.getvalue()
+        for text in ('До:     ana@test.mk', 'Наслов: GEOCAB - потврдете ја е-поштата', 'Здраво Ана,',
+                     'http://x/register/confirm/abc/'):
+            self.assertIn(text, out)
+        self.assertNotIn('base64', out)
 
     def test_register_validation(self):
         response = Client().post('/register/', {**REGISTER, 'phone': 'abc', 'email': 'losa', 'password2': 'drugo'})
@@ -61,7 +178,8 @@ class RegisterTest(GeocabTestCase):
         self.assertIn('Телефонот смее да содржи само бројки и +.', errors)
         self.assertIn('Невалидна е-пошта.', errors)
         self.assertIn('Лозинките не се совпаѓаат.', errors)
-        self.assertFalse(Users.objects.filter(username='ana_new').exists())
+        self.assertFalse(PendingRegistrations.objects.exists())
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_register_weak_password(self):
         response = Client().post('/register/', {**REGISTER, 'password1': '123', 'password2': '123'})

@@ -1,0 +1,65 @@
+{% extends 'GEOCAB_APP/base.html' %}
+{% load geocab %}
+
+{% block title %}Плаќање со картичка - GEOCAB{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <h1 class="h3 mb-3">💳 Плаќање со картичка</h1>
+
+        {% if demo %}
+            <div class="alert alert-info small">
+                <strong>Демо плаќање</strong> - не се наплаќаат вистински пари.
+                Тест картичка: <code>4242 4242 4242 4242</code>, кој било иден датум и кој било CVV.
+                Одбиена картичка: <code>4000 0000 0000 0002</code>.
+            </div>
+        {% endif %}
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <h2 class="h6">За плаќање</h2>
+                <ul class="list-unstyled small mb-2">
+                    {% for p in unpaid %}
+                        <li class="d-flex justify-content-between border-bottom py-1">
+                            <span>
+                                {% if p.ride.status.status_text == 'cancelled' %}Казна за откажување{% else %}Возење{% endif %}
+                                #{{ p.ride_id }} · {{ p.payment_time|date:"d.m.Y" }}
+                                {% if p.status.status_text == 'failed' %}<span class="badge text-bg-danger">неуспешно</span>{% endif %}
+                            </span>
+                            <span>{{ p.amount }} ден.</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+                <div class="d-flex justify-content-between fs-5 fw-bold">
+                    <span>Вкупно</span><span>{{ total }} ден.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <form method="post" autocomplete="on" novalidate>
+                    {% csrf_token %}
+                    {% for error in form.non_field_errors %}<div class="alert alert-danger small">{{ error }}</div>{% endfor %}
+                    {% include 'GEOCAB_APP/partials/field.html' with field=form.card_name %}
+                    {% include 'GEOCAB_APP/partials/field.html' with field=form.card_number %}
+                    <div class="row g-2">
+                        <div class="col-7">{% include 'GEOCAB_APP/partials/field.html' with field=form.card_expiry %}</div>
+                        <div class="col-5">{% include 'GEOCAB_APP/partials/field.html' with field=form.card_cvv %}</div>
+                    </div>
+                    <button type="submit" class="btn btn-dark btn-lg w-100">Плати {{ total }} ден.</button>
+                </form>
+                <p class="small text-secondary mt-3 mb-0">
+                    🔒 Бројот на картичката и CVV не се зачувуваат. Во GEOCAB останува само типот и последните 4 цифри.
+                </p>
+            </div>
+        </div>
+
+        <p class="text-center small">
+            Сакате да платите во готовина? Платете му на возачот - тој го потврдува плаќањето.
+            <br><a href="{% url 'ride_current' %}">← Назад кон моето возење</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,10 +1,14 @@
+import re
+from datetime import date
+
 from django import forms
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import MinValueValidator, RegexValidator
 
 from .auth import ROLES, is_active
-from .models import Drivers, DriversVehicleOwnership, Status, Users, VehicleOwnership, VehicleTypes, VehiclesModel
+from .card_gateway import card_brand, digits_only, luhn_ok
+from .models import Drivers, DriversVehicleOwnership, PendingRegistrations, Users, VehicleOwnership, VehicleTypes, VehiclesModel
 
 # Исти правила како CHECK ограничувањата во базата (chk_*_phone, chk_*_email)
 phone_validator = RegexValidator(r'^[0-9+]+$', 'Телефонот смее да содржи само бројки и +.')
@@ -33,13 +37,11 @@ class RegisterForm(forms.ModelForm):
             self.add_error('password2', 'Лозинките не се совпаѓаат.')
         return cleaned
 
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.password_hash = make_password(self.cleaned_data['password1'])
-        user.status = Status.objects.get(status_tip='user', status_text='active')
-        if commit:
-            user.save()
-        return user
+    # нема save(): профилот го креира базата дури по потврдата на е-поштата (account_views.register)
+
+
+class ResendConfirmationForm(forms.Form):
+    email = forms.CharField(label='Е-пошта', max_length=255, validators=[email_validator])
 
 
 class LoginForm(forms.Form):
@@ -56,12 +58,20 @@ class LoginForm(forms.Form):
             return cleaned
         model = ROLES[role][0]
         person = model.objects.select_related('status').filter(username=username).first()
+        if person is None and role == 'user':
+            pending = PendingRegistrations.objects.filter(username=username).first()
+            if pending and check_password(password, pending.password_hash):
+                raise forms.ValidationError('Профилот уште не е активиран. Отворете го линкот што ви го испративме '
+                                            f'на {pending.email} или побарајте нов линк.')
         if person is None or not check_password(password, person.password_hash):
             raise forms.ValidationError('Погрешно корисничко име или лозинка.')
         if not is_active(person, role):
             raise forms.ValidationError(f'Профилот не е активен ({person.status.status_text}).')
         cleaned['person'] = person
         return cleaned
+
+
+PAYMENT_CHOICES = [('CASH', 'Готовина'), ('CARD', 'Картичка')]
 
 
 class RideForm(forms.Form):
@@ -79,6 +89,10 @@ class RideForm(forms.Form):
     dropoff_ulica = forms.CharField(label='Улица', max_length=255)
     dropoff_broj = forms.CharField(label='Број', max_length=255, required=False)
     vehicle_class = forms.CharField(max_length=255, required=False)
+    payment_method = forms.ChoiceField(choices=PAYMENT_CHOICES, initial='CASH', required=False)
+
+    def clean_payment_method(self):
+        return self.cleaned_data.get('payment_method') or 'CASH'
 
     def clean(self):
         cleaned = super().clean()
@@ -209,6 +223,51 @@ class PayoutForm(forms.Form):
     note = forms.CharField(label='Забелешка', max_length=255, required=False,
                            widget=forms.TextInput(attrs={'placeholder': 'на пр. уплатено во готовина'}))
 
+
+
+class CardPaymentForm(forms.Form):
+    """Податоци од картичката. Се користат само за наплатата (card_gateway.charge) и не се запишуваат."""
+    card_name = forms.CharField(label='Име на картичката', max_length=100,
+                                widget=forms.TextInput(attrs={'autocomplete': 'cc-name', 'placeholder': 'ANA PETROVA'}))
+    card_number = forms.CharField(label='Број на картичка', max_length=23,
+                                  widget=forms.TextInput(attrs={'autocomplete': 'cc-number', 'inputmode': 'numeric',
+                                                                'placeholder': '4242 4242 4242 4242'}))
+    card_expiry = forms.CharField(label='Важи до (ММ/ГГ)', max_length=7,
+                                  widget=forms.TextInput(attrs={'autocomplete': 'cc-exp', 'inputmode': 'numeric',
+                                                                'placeholder': '12/28'}))
+    card_cvv = forms.CharField(label='CVV', max_length=4,
+                               widget=forms.PasswordInput(attrs={'autocomplete': 'cc-csc', 'inputmode': 'numeric',
+                                                                 'placeholder': '123'}))
+
+    def clean_card_number(self):
+        number = digits_only(self.cleaned_data['card_number'])
+        if not 12 <= len(number) <= 19 or not luhn_ok(number):
+            raise forms.ValidationError('Бројот на картичката не е исправен.')
+        return number
+
+    def clean_card_expiry(self):
+        value = self.cleaned_data['card_expiry'].replace(' ', '')
+        match = re.fullmatch(r'(\d{1,2})/(\d{2}|\d{4})', value)
+        if not match or not 1 <= int(match[1]) <= 12:
+            raise forms.ValidationError('Внесете месец и година, на пр. 12/28.')
+        month, year = int(match[1]), int(match[2][-2:]) + 2000
+        today = date.today()
+        if (year, month) < (today.year, today.month):
+            raise forms.ValidationError('Картичката е истечена.')
+        return f'{month:02d}/{year % 100:02d}'
+
+    def clean_card_cvv(self):
+        cvv = self.cleaned_data['card_cvv'].strip()
+        if not re.fullmatch(r'\d{3,4}', cvv):
+            raise forms.ValidationError('CVV е 3 или 4 цифри од задната страна.')
+        return cvv
+
+    def clean(self):
+        cleaned = super().clean()
+        number, cvv = cleaned.get('card_number'), cleaned.get('card_cvv')
+        if number and cvv and len(cvv) != (4 if card_brand(number) == 'AMEX' else 3):
+            self.add_error('card_cvv', 'CVV не одговара на типот на картичката.')
+        return cleaned
 
 
 class CommissionForm(forms.Form):

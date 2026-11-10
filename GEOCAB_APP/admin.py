@@ -8,7 +8,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from . import db
 from .forms import email_validator, phone_validator
 from .models import (
-    ActiveDrivers, Admins, Cancellations, CommissionPayouts, Drivers, DriversVehicleOwnership, Locations,
+    ActiveDrivers, Admins, Cancellations, CardTransactions, CommissionPayouts, DriverPayouts, Drivers, PendingRegistrations, DriversVehicleOwnership, Locations,
     Messages, Notifications, PaymentMethods, Payments, PlatformSettings, PricingRules, Ratings,
     RideRejections, RideReports, Rides, Status, Users, VehicleOwnership, VehicleTypes, VehiclesModel,
 )
@@ -304,6 +304,30 @@ class CommissionPayoutsAdmin(ReadOnlyAdmin):
     list_display = ('payout_id', 'driver', 'amount', 'paid_at', 'admin', 'note')
     list_filter = ('driver',)
     ordering = ('-payout_id',)
+
+
+@admin.register(DriverPayouts)
+class DriverPayoutsAdmin(ReadOnlyAdmin):
+    """Исплатите се евидентираат од админ панелот во апликацијата (sp_record_driver_payout)."""
+    list_display = ('payout_id', 'driver', 'amount', 'paid_at', 'admin', 'note')
+    list_filter = ('driver',)
+    ordering = ('-payout_id',)
+
+
+@admin.register(CardTransactions)
+class CardTransactionsAdmin(ReadOnlyAdmin):
+    """Обиди за плаќање со картичка (само тип и последни 4 цифри)."""
+    list_display = ('card_transaction_id', 'payment', 'card_brand', 'card_last4', 'approved', 'created_at')
+    list_filter = ('approved', 'card_brand')
+    ordering = ('-card_transaction_id',)
+
+
+@admin.register(PendingRegistrations)
+class PendingRegistrationsAdmin(ReadOnlyAdmin):
+    """Регистрации што чекаат потврда на е-пошта (без hash од лозинката и токенот)."""
+    list_display = ('pending_id', 'username', 'name', 'email', 'phone', 'created_at', 'expires_at')
+    exclude = ('password_hash', 'token_hash')
+    ordering = ('-pending_id',)
 
 
 @admin.register(RideReports)

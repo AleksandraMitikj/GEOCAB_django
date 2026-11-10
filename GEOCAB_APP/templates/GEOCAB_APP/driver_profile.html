@@ -1,4 +1,5 @@
 {% extends 'GEOCAB_APP/base.html' %}
+{% load geocab %}
 
 {% block title %}Мој профил - GEOCAB{% endblock %}
 
@@ -51,7 +52,9 @@
     <div class="card-body">
         <h2 class="h6 mb-3">Поделба на наплатените пари</h2>
         <table class="table table-sm mb-2">
-            <tr><td>Вкупно наплатено од корисници (готовина)</td><td class="text-end fw-semibold">{{ summary.total_collected }} ден.</td></tr>
+            <tr><td>Вкупно наплатено од корисници</td><td class="text-end fw-semibold">{{ summary.total_collected }} ден.</td></tr>
+            <tr><td class="small ps-3">💵 во готовина (кај вас)</td><td class="text-end small">{{ summary.cash_collected }} ден.</td></tr>
+            <tr><td class="small ps-3">💳 со картичка (кај GEOCAB)</td><td class="text-end small">{{ summary.card_collected }} ден.</td></tr>
             <tr class="table-success"><td>Ваш дел ({{ driver_share|floatformat:0 }}%)</td><td class="text-end fw-semibold">{{ summary.driver_earnings }} ден.</td></tr>
             <tr><td>Провизија за GEOCAB ({{ commission|floatformat:0 }}%)</td><td class="text-end">{{ summary.platform_commission }} ден.</td></tr>
             {% if summary.cancellation_earnings %}
@@ -63,7 +66,8 @@
         </table>
         <p class="small text-secondary mb-0">
             Тековната провизија на платформата е <strong>{{ commission|floatformat:0 }}%</strong>.
-            Бидејќи плаќањето е во готовина, целиот износ е кај вас, а провизијата за GEOCAB ја уплаќате кај администраторот.
+            Готовината е кај вас и од неа должите провизија. Парите од картички ги прима GEOCAB и ви го должи вашиот дел.
+            Двете се пребиваат автоматски - подолу е само разликата.
         </p>
     </div>
 </div>
@@ -74,23 +78,37 @@
 <div class="card border-0 shadow-sm mb-4 {% if balance.balance > 0 %}border-start border-4 border-warning{% endif %}">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h2 class="h6 mb-0">Провизија за GEOCAB</h2>
+            <h2 class="h6 mb-0">Пресметка со GEOCAB</h2>
             {% if balance.balance > 0 %}
                 <span class="fs-5 fw-bold text-danger">Должите: {{ balance.balance }} ден.</span>
+            {% elif owed_to_driver %}
+                <span class="fs-5 fw-bold text-success">GEOCAB ви должи: {{ owed_to_driver }} ден.</span>
             {% else %}
                 <span class="badge text-bg-success">✓ Немате долг</span>
             {% endif %}
         </div>
         <div class="small text-secondary mt-1">
-            Вкупна провизија {{ balance.total_commission }} ден. · уплатено {{ balance.total_paid }} ден.
+            Провизија од готовина {{ balance.total_commission }} ден. · ваш дел од картички {{ balance.card_earnings }} ден.
+            · уплатено од вас {{ balance.total_paid }} ден. · исплатено од GEOCAB {{ balance.driver_payouts }} ден.
             · Провизијата за секој месец се плаќа од 1 до 15 во следниот месец.
             {% if balance.balance > 0 %}· Уплатете ја провизијата кај администраторот на GEOCAB.{% endif %}
+            {% if owed_to_driver %}· Администраторот ќе ви го исплати износот.{% endif %}
         </div>
         {% if payouts %}
             <table class="table table-sm small mt-3 mb-0">
                 <thead><tr class="text-secondary"><th>Уплатено на</th><th class="text-end">Износ</th><th>Забелешка</th></tr></thead>
                 <tbody>
                 {% for p in payouts %}
+                    <tr><td>{{ p.paid_at|date:"d.m.Y H:i" }}</td><td class="text-end">{{ p.amount }} ден.</td><td>{{ p.note|default:"" }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if driver_payouts %}
+            <table class="table table-sm small mt-3 mb-0">
+                <thead><tr class="text-secondary"><th>Исплатено од GEOCAB на</th><th class="text-end">Износ</th><th>Забелешка</th></tr></thead>
+                <tbody>
+                {% for p in driver_payouts %}
                     <tr><td>{{ p.paid_at|date:"d.m.Y H:i" }}</td><td class="text-end">{{ p.amount }} ден.</td><td>{{ p.note|default:"" }}</td></tr>
                 {% endfor %}
                 </tbody>
@@ -132,13 +150,14 @@
         {% if payments %}
         <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
-                <thead><tr class="small text-secondary"><th>Време</th><th>Возење</th><th>Корисник</th><th class="text-end">Износ</th><th class="text-end">Ваш дел</th><th class="text-end">GEOCAB</th></tr></thead>
+                <thead><tr class="small text-secondary"><th>Време</th><th>Возење</th><th>Корисник</th><th>Начин</th><th class="text-end">Износ</th><th class="text-end">Ваш дел</th><th class="text-end">GEOCAB</th></tr></thead>
                 <tbody>
                 {% for p in payments %}
                     <tr>
                         <td class="small">{{ p.payment_time|date:"d.m H:i" }}</td>
                         <td class="small">#{{ p.ride_id }}{% if p.ride.status.status_text == 'cancelled' %} <span class="badge text-bg-secondary">казна</span>{% endif %}</td>
                         <td class="small">{{ p.ride.user.name }}</td>
+                        <td class="small">{{ p.payment_method.payment_tip|pay_method }}</td>
                         <td class="text-end">{{ p.amount }}</td>
                         <td class="text-end fw-semibold">{{ p.driver_amount }}</td>
                         <td class="text-end text-secondary">{{ p.platform_amount }} <span class="small">({{ p.commission_percentage|floatformat:0 }}%)</span></td>

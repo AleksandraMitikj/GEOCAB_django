@@ -125,6 +125,11 @@ def record_commission_payout(driver_id, admin_id, amount, note=None):
     call_procedure('sp_record_commission_payout', driver_id, admin_id, amount, note)
 
 
+def record_driver_payout(driver_id, admin_id, amount, note=None):
+    """GEOCAB му исплатил на возачот (заработка од картички; не смее да е повеќе од она што му се должи)."""
+    call_procedure('sp_record_driver_payout', driver_id, admin_id, amount, note)
+
+
 # ---- Возач ----------------------------------------------------------------
 
 def driver_start_shift(driver_id, location_id, vehicle_ownership_id):
@@ -166,9 +171,31 @@ def complete_ride(ride_id, driver_id, distance_km=None):
 
 # ---- Корисник -------------------------------------------------------------
 
-def request_ride(user_id, pickup_location_id, dropoff_location_id, vehicle_class=None, distance_km=None):
-    """Враќа ride_id. Базата веднаш бара најблизок возач. distance_km = по пат (None = воздушно)."""
-    return call_function('fn_request_ride', user_id, pickup_location_id, dropoff_location_id, vehicle_class, distance_km)
+CONFIRMATION_VALID_HOURS = 24   # колку часа важи линкот за потврда на е-пошта
+
+
+def create_pending_registration(name, username, phone, email, password_hash, token_hash):
+    """Регистрација што чека потврда на е-пошта (профилот уште не постои во Users). Враќа pending_id."""
+    return call_function('fn_create_pending_registration', name, username, phone, email, password_hash, token_hash,
+                         CONFIRMATION_VALID_HOURS)
+
+
+def renew_pending_registration(email, token_hash):
+    """Нов линк за потврда (стариот престанува да важи). None ако нема регистрација што чека."""
+    return call_function('fn_renew_pending_registration', email, token_hash, CONFIRMATION_VALID_HOURS)
+
+
+def confirm_registration(token_hash):
+    """Линкот од мејлот е отворен: базата го креира профилот во Users. Враќа user_id."""
+    return call_function('fn_confirm_registration', token_hash)
+
+
+def request_ride(user_id, pickup_location_id, dropoff_location_id, vehicle_class=None, distance_km=None,
+                 payment_tip='CASH'):
+    """Враќа ride_id. Базата веднаш бара најблизок возач. distance_km = по пат (None = воздушно).
+    payment_tip: 'CASH' / 'CARD' - како корисникот планира да плати."""
+    return call_function('fn_request_ride', user_id, pickup_location_id, dropoff_location_id, vehicle_class,
+                         distance_km, payment_tip)
 
 
 def cancel_ride(ride_id, cancelled_by_type, cancelled_by_id, reason, no_show=False):
@@ -176,9 +203,10 @@ def cancel_ride(ride_id, cancelled_by_type, cancelled_by_id, reason, no_show=Fal
     call_procedure('sp_cancel_ride', ride_id, cancelled_by_type, cancelled_by_id, reason, no_show)
 
 
-def process_payment(ride_id, payment_tip, success=True):
-    """payment_tip: 'CASH' или 'CARD'"""
-    call_procedure('sp_process_payment', ride_id, payment_tip, success)
+def process_payment(ride_id, payment_tip, success=True, card_brand=None, card_last4=None):
+    """payment_tip: 'CASH' или 'CARD'. За CARD: резултатот од платежната порта и тип + последни 4 цифри
+    (целиот број никогаш не се праќа во базата)."""
+    call_procedure('sp_process_payment', ride_id, payment_tip, success, card_brand, card_last4)
 
 
 def rate_ride(ride_id, user_id, score, comment=None):

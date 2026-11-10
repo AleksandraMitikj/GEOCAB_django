@@ -205,6 +205,12 @@ CREATE TABLE Active_drivers (
                                         ON DELETE RESTRICT
 );
 
+-- Начини на плаќање: CASH (готовина на возачот) / CARD (картичка преку GEOCAB)
+CREATE TABLE Payment_methods(
+                                payment_method_id SERIAL PRIMARY KEY,
+                                payment_tip  VARCHAR(255) NOT NULL UNIQUE
+);
+
 CREATE TABLE Rides (
                        ride_id SERIAL PRIMARY KEY,
                        user_id INT NOT NULL,
@@ -222,6 +228,7 @@ CREATE TABLE Rides (
                        distance_km NUMERIC(6,2) NOT NULL,
                        final_price NUMERIC(10,2),              -- се пресметува на крајот на возењето
                        discount_percentage NUMERIC(5,2) NOT NULL DEFAULT 0,
+                       payment_method_id INT NOT NULL,         -- начинот што корисникот го избрал при барањето (CASH / CARD)
                        CONSTRAINT chk_distance CHECK (distance_km >= 0),
                        CONSTRAINT chk_discount CHECK (discount_percentage BETWEEN 0 AND 100),
                        CONSTRAINT chk_ride_locations CHECK (pickup_location_id <> dropoff_location_id),
@@ -237,7 +244,9 @@ CREATE TABLE Rides (
                        CONSTRAINT FK_Rides_Dropoff_Location
                            FOREIGN KEY (dropoff_location_id) REFERENCES Locations(location_id) ON DELETE RESTRICT,
                        CONSTRAINT FK_Rides_Status
-                           FOREIGN KEY (status_id) REFERENCES Status(status_id) ON DELETE RESTRICT
+                           FOREIGN KEY (status_id) REFERENCES Status(status_id) ON DELETE RESTRICT,
+                       CONSTRAINT FK_Rides_Payment_method
+                           FOREIGN KEY (payment_method_id) REFERENCES Payment_methods(payment_method_id) ON DELETE RESTRICT
 );
 
 -- Возачи што одбиле одредено возење (за да не им се понуди повторно)
@@ -256,11 +265,6 @@ CREATE TABLE Ride_rejections (
                                      FOREIGN KEY (ride_id) REFERENCES Rides(ride_id) ON DELETE CASCADE,
                                  CONSTRAINT FK_Ride_rejections_Drivers
                                      FOREIGN KEY (driver_id) REFERENCES Drivers(driver_id) ON DELETE CASCADE
-);
-
-CREATE TABLE Payment_methods(
-                                payment_method_id SERIAL PRIMARY KEY,
-                                payment_tip  VARCHAR(255) NOT NULL UNIQUE
 );
 
 -- Поставки на платформата (секогаш точно еден ред, setting_id = 1).
@@ -369,6 +373,37 @@ CREATE TABLE Commission_payouts (
 );
 
 
+-- Исплати од GEOCAB кон возачот: заработката од плаќања со картичка ја прима GEOCAB,
+-- па по пребивањето со провизијата од готовина GEOCAB му го исплаќа остатокот на возачот.
+CREATE TABLE Driver_payouts (
+                                payout_id SERIAL PRIMARY KEY,
+                                driver_id INT NOT NULL,
+                                admin_id INT NOT NULL,                 -- кој администратор ја направил исплатата
+                                amount NUMERIC(10,2) NOT NULL,
+                                paid_at TIMESTAMP NOT NULL DEFAULT now(),
+                                note VARCHAR(255),
+                                CONSTRAINT chk_driver_payout_amount CHECK (amount > 0),
+                                CONSTRAINT FK_Driver_payouts_Drivers
+                                    FOREIGN KEY (driver_id) REFERENCES Drivers(driver_id) ON DELETE RESTRICT,
+                                CONSTRAINT FK_Driver_payouts_Admins
+                                    FOREIGN KEY (admin_id) REFERENCES Admins(admins_id) ON DELETE RESTRICT
+);
+
+
+-- Секој обид за плаќање со картичка (одобрен или одбиен).
+-- Целиот број и CVV НИКОГАШ не се чуваат - само тип и последните 4 цифри.
+CREATE TABLE Card_transactions (
+                                   card_transaction_id SERIAL PRIMARY KEY,
+                                   payment_id INT NOT NULL,
+                                   card_brand VARCHAR(20) NOT NULL,       -- VISA / MASTERCARD / MAESTRO / AMEX / OTHER
+                                   card_last4 CHAR(4) NOT NULL,
+                                   approved BOOLEAN NOT NULL,
+                                   created_at TIMESTAMP NOT NULL DEFAULT now(),
+                                   CONSTRAINT chk_card_last4 CHECK (card_last4 ~ '^[0-9]{4}$'),
+                                   CONSTRAINT FK_Card_transactions_Payments
+                                       FOREIGN KEY (payment_id) REFERENCES Payments(payment_id) ON DELETE CASCADE
+);
+
 -- Пријави на проблем во тек на возење (од корисник или возач)
 CREATE TABLE Ride_reports (
                               report_id SERIAL PRIMARY KEY,
@@ -393,6 +428,25 @@ CREATE TABLE Ride_reports (
 );
 
 
+-- Регистрации што чекаат потврда на е-пошта. Профилот во Users се креира дури кога корисникот
+-- ќе го отвори линкот од мејлот (fn_confirm_registration). Се чува само hash од токенот (SHA-256),
+-- па ни со пристап до базата не може да се активира туѓ профил; лозинката е исто само hash.
+CREATE TABLE Pending_registrations (
+                                       pending_id SERIAL PRIMARY KEY,
+                                       name VARCHAR(255) NOT NULL,
+                                       username VARCHAR(255) NOT NULL,
+                                       phone VARCHAR(255) NOT NULL,
+                                       email VARCHAR(255) NOT NULL UNIQUE,
+                                       password_hash TEXT NOT NULL,
+                                       token_hash CHAR(64) NOT NULL UNIQUE,
+                                       created_at TIMESTAMP NOT NULL DEFAULT now(),
+                                       expires_at TIMESTAMP NOT NULL,
+                                       CONSTRAINT chk_pending_phone CHECK (phone ~ '^[0-9+]+$'),
+                                       CONSTRAINT chk_pending_email CHECK (email ~ '^[^@]+@[^@]+\.[^@]+$'),
+                                       CONSTRAINT chk_pending_token CHECK (token_hash ~ '^[0-9a-f]{64}$')
+);
+
+
 -- =====================================================================
 -- 3. ИНДЕКСИ
 -- =====================================================================
@@ -405,6 +459,8 @@ CREATE INDEX idx_notifications_user  ON Notifications(User_id);
 CREATE INDEX idx_cancellations_ride  ON Cancellations(ride_id);
 CREATE INDEX idx_commission_payouts_driver ON Commission_payouts(driver_id);
 CREATE INDEX idx_ride_reports_ride ON Ride_reports(ride_id);
+CREATE INDEX idx_driver_payouts_driver ON Driver_payouts(driver_id);
+CREATE INDEX idx_card_transactions_payment ON Card_transactions(payment_id);
 
 
 -- =====================================================================
@@ -551,8 +607,8 @@ $$ LANGUAGE plpgsql STABLE;
 -- p_today е за тестирање; во апликацијата секогаш е денешниот датум.
 CREATE OR REPLACE FUNCTION fn_driver_debt_status(p_driver_id INT, p_today DATE DEFAULT current_date)
     RETURNS TABLE(
-                     total_commission NUMERIC,
-                     total_paid       NUMERIC,
+                     total_commission NUMERIC,   -- провизија од плаќања во готовина
+                     total_paid       NUMERIC,   -- уплати на возачот + заработка од картички - исплати од GEOCAB
                      due_amount       NUMERIC,
                      due_month        DATE,
                      warning_amount   NUMERIC,
@@ -561,16 +617,25 @@ CREATE OR REPLACE FUNCTION fn_driver_debt_status(p_driver_id INT, p_today DATE D
                      overdue_month    DATE,
                      is_blocked       BOOLEAN
                  ) AS $$
-WITH months AS (
-    SELECT date_trunc('month', p.payment_time)::DATE AS m, SUM(p.platform_amount) AS c
+-- Пребивање: заработката на возачот од плаќања со картичка (ја држи GEOCAB) се смета како уплата
+-- на провизијата од готовина. Уплатите го покриваат најстариот месец прв (FIFO).
+WITH completed AS (
+    SELECT p.payment_time, p.platform_amount, p.driver_amount, pm.payment_tip
     FROM Payments p
-             JOIN Rides r  ON r.ride_id   = p.ride_id
-             JOIN Status s ON s.status_id = p.status_id
+             JOIN Rides r            ON r.ride_id            = p.ride_id
+             JOIN Status s           ON s.status_id          = p.status_id
+             JOIN Payment_methods pm ON pm.payment_method_id = p.payment_method_id
     WHERE r.driver_id = p_driver_id
       AND s.status_text = 'completed'
+), months AS (
+    SELECT date_trunc('month', payment_time)::DATE AS m, SUM(platform_amount) AS c
+    FROM completed
+    WHERE payment_tip = 'CASH'
     GROUP BY 1
 ), paid AS (
-    SELECT COALESCE(SUM(amount), 0) AS total FROM Commission_payouts WHERE driver_id = p_driver_id
+    SELECT (SELECT COALESCE(SUM(amount), 0) FROM Commission_payouts WHERE driver_id = p_driver_id)
+         + (SELECT COALESCE(SUM(driver_amount), 0) FROM completed WHERE payment_tip = 'CARD')
+         - (SELECT COALESCE(SUM(amount), 0) FROM Driver_payouts WHERE driver_id = p_driver_id) AS total
 ), staged AS (
     SELECT m,
            LEAST(c, GREATEST(0, SUM(c) OVER (ORDER BY m) - (SELECT total FROM paid))) AS left_to_pay,
@@ -878,8 +943,8 @@ CREATE TRIGGER trg_driver_availability
     FOR EACH ROW EXECUTE FUNCTION trg_fn_driver_availability();
 
 
--- 5.6 На завршено возење се креира плаќање (pending, CASH по default;
---     начинот се менува во sp_process_payment)
+-- 5.6 На завршено возење се креира плаќање (pending) со начинот што корисникот го избрал
+--     при барањето; корисникот може да го смени при плаќањето (sp_process_payment)
 CREATE OR REPLACE FUNCTION trg_fn_create_payment()
     RETURNS TRIGGER AS $$
 BEGIN
@@ -887,7 +952,7 @@ BEGIN
         AND fn_get_status_text(OLD.status_id) <> 'completed' THEN
         INSERT INTO Payments (amount, payment_method_id, payment_time, ride_id, status_id)
         VALUES (NEW.final_price,
-                (SELECT payment_method_id FROM Payment_methods WHERE payment_tip = 'CASH'),
+                NEW.payment_method_id,
                 now(),
                 NEW.ride_id,
                 fn_get_status_id('payment', 'pending'));
@@ -947,7 +1012,7 @@ BEGIN
     IF NEW.cancellation_fee > 0 THEN
         INSERT INTO Payments (amount, payment_method_id, payment_time, ride_id, status_id)
         VALUES (NEW.cancellation_fee,
-                (SELECT payment_method_id FROM Payment_methods WHERE payment_tip = 'CASH'),
+                (SELECT payment_method_id FROM Rides WHERE ride_id = NEW.ride_id),
                 now(),
                 NEW.ride_id,
                 fn_get_status_id('payment', 'pending'));
@@ -1266,11 +1331,13 @@ CREATE OR REPLACE FUNCTION fn_request_ride(
     p_pickup_location_id INT,
     p_dropoff_location_id INT,
     p_vehicle_class VARCHAR DEFAULT NULL,
-    p_distance_km NUMERIC DEFAULT NULL       -- растојание по пат (од апликацијата); NULL = воздушно
+    p_distance_km NUMERIC DEFAULT NULL,      -- растојание по пат (од апликацијата); NULL = воздушно
+    p_payment_tip VARCHAR DEFAULT 'CASH'     -- CASH / CARD: како корисникот планира да плати
 )
     RETURNS INT AS $$
 DECLARE
-    v_ride_id INT;
+    v_ride_id   INT;
+    v_method_id INT;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM Users
                    WHERE User_id = p_user_id
@@ -1290,12 +1357,17 @@ BEGIN
     IF p_distance_km IS NOT NULL AND p_distance_km < 0 THEN
         RAISE EXCEPTION 'Растојанието не може да е негативно';
     END IF;
+    SELECT payment_method_id INTO v_method_id FROM Payment_methods WHERE payment_tip = p_payment_tip;
+    IF v_method_id IS NULL THEN
+        RAISE EXCEPTION 'Непознат начин на плаќање: %', p_payment_tip;
+    END IF;
 
     INSERT INTO Rides (user_id, pickup_location_id, dropoff_location_id, status_id,
-                       requested_vehicle_class, request_time, distance_km, discount_percentage)
+                       requested_vehicle_class, request_time, distance_km, discount_percentage, payment_method_id)
     VALUES (p_user_id, p_pickup_location_id, p_dropoff_location_id,
             fn_get_status_id('ride', 'requested'), p_vehicle_class, now(),
-            COALESCE(p_distance_km, fn_calculate_distance_km(p_pickup_location_id, p_dropoff_location_id)), 0)
+            COALESCE(p_distance_km, fn_calculate_distance_km(p_pickup_location_id, p_dropoff_location_id)), 0,
+            v_method_id)
     RETURNING ride_id INTO v_ride_id;
 
     PERFORM fn_assign_driver(v_ride_id);
@@ -1437,12 +1509,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 6.11 Плаќање на завршено возење. p_payment_tip = 'CASH' / 'CARD',
---      p_success = false симулира неуспешно плаќање со картичка (може повторно да се обиде)
+-- 6.11 Плаќање на завршено возење или казна. p_payment_tip = 'CASH' / 'CARD'.
+--      CARD: апликацијата прво ја прашува платежната порта, па го праќа резултатот
+--      (p_success) и податоците за картичката (тип, последни 4 цифри) - се запишува во
+--      Card_transactions. Одбиено плаќање станува failed и може повторно да се обиде.
 CREATE OR REPLACE PROCEDURE sp_process_payment(
     p_ride_id INT,
     p_payment_tip VARCHAR,
-    p_success BOOLEAN DEFAULT true
+    p_success BOOLEAN DEFAULT true,
+    p_card_brand VARCHAR DEFAULT NULL,
+    p_card_last4 VARCHAR DEFAULT NULL
 ) AS $$
 DECLARE
     v_payment_id INT;
@@ -1452,6 +1528,9 @@ BEGIN
     FROM Payment_methods WHERE payment_tip = p_payment_tip;
     IF v_method_id IS NULL THEN
         RAISE EXCEPTION 'Непознат начин на плаќање: %', p_payment_tip;
+    END IF;
+    IF p_payment_tip = 'CARD' AND (p_card_brand IS NULL OR p_card_last4 IS NULL) THEN
+        RAISE EXCEPTION 'За плаќање со картичка потребни се тип и последни 4 цифри од картичката';
     END IF;
 
     SELECT p.payment_id INTO v_payment_id
@@ -1464,6 +1543,11 @@ BEGIN
         FOR UPDATE OF p;
     IF v_payment_id IS NULL THEN
         RAISE EXCEPTION 'Нема плаќање што чека за возењето %', p_ride_id;
+    END IF;
+
+    IF p_payment_tip = 'CARD' THEN
+        INSERT INTO Card_transactions (payment_id, card_brand, card_last4, approved, created_at)
+        VALUES (v_payment_id, p_card_brand, p_card_last4, p_success, now());
     END IF;
 
     UPDATE Payments
@@ -1627,6 +1711,41 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 6.14a Администраторот евидентира исплата од GEOCAB на возачот (кога по пребивањето
+--       GEOCAB му должи - заработка од плаќања со картичка). Не смее да е повеќе од долгот.
+CREATE OR REPLACE PROCEDURE sp_record_driver_payout(
+    p_driver_id INT,
+    p_admin_id INT,
+    p_amount NUMERIC,
+    p_note VARCHAR DEFAULT NULL
+) AS $$
+DECLARE
+    v_balance NUMERIC;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Admins
+                   WHERE admins_id = p_admin_id
+                     AND status_id = fn_get_status_id('admin', 'active')) THEN
+        RAISE EXCEPTION 'Администраторот % не постои или не е активен', p_admin_id;
+    END IF;
+    IF p_amount IS NULL OR p_amount <= 0 THEN
+        RAISE EXCEPTION 'Износот мора да е поголем од 0';
+    END IF;
+
+    PERFORM 1 FROM Drivers WHERE driver_id = p_driver_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Возачот % не постои', p_driver_id;
+    END IF;
+    SELECT balance INTO v_balance FROM vw_driver_commission_balance WHERE driver_id = p_driver_id;
+    IF p_amount > -v_balance THEN
+        RAISE EXCEPTION 'Износот % е поголем од она што GEOCAB му должи на возачот (% ден.)',
+            p_amount, GREATEST(-v_balance, 0);
+    END IF;
+
+    INSERT INTO Driver_payouts (driver_id, admin_id, amount, paid_at, note)
+    VALUES (p_driver_id, p_admin_id, p_amount, now(), p_note);
+END;
+$$ LANGUAGE plpgsql;
+
 
 -- 6.15 Корисникот или возачот пријавува проблем за возење што е во тек
 CREATE OR REPLACE PROCEDURE sp_report_problem(
@@ -1678,6 +1797,105 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Пријавата % не постои или е веќе решена', p_report_id;
     END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 6.17 Регистрација со потврда на е-пошта.
+--      fn_create_pending_registration: барање што чека потврда (рок p_valid_hours); старото барање
+--      со истата е-пошта се заменува, истечените се бришат. Враќа pending_id.
+CREATE OR REPLACE FUNCTION fn_create_pending_registration(
+    p_name VARCHAR,
+    p_username VARCHAR,
+    p_phone VARCHAR,
+    p_email VARCHAR,
+    p_password_hash TEXT,
+    p_token_hash VARCHAR,
+    p_valid_hours INT DEFAULT 24
+)
+    RETURNS INT AS $$
+DECLARE
+    v_pending_id INT;
+BEGIN
+    DELETE FROM Pending_registrations WHERE expires_at < now();
+
+    IF EXISTS (SELECT 1 FROM Users WHERE username = p_username) THEN
+        RAISE EXCEPTION 'Корисничкото име % е зафатено', p_username;
+    END IF;
+    IF EXISTS (SELECT 1 FROM Users WHERE phone = p_phone) THEN
+        RAISE EXCEPTION 'Веќе постои профил со телефонот %', p_phone;
+    END IF;
+    IF EXISTS (SELECT 1 FROM Users WHERE lower(email) = lower(p_email)) THEN
+        RAISE EXCEPTION 'Веќе постои профил со е-поштата %', p_email;
+    END IF;
+
+    -- истиот човек се регистрира повторно (на пр. не го добил мејлот) -> новото барање го заменува старото
+    DELETE FROM Pending_registrations WHERE lower(email) = lower(p_email);
+
+    IF EXISTS (SELECT 1 FROM Pending_registrations WHERE username = p_username) THEN
+        RAISE EXCEPTION 'Корисничкото име % е резервирано за друга регистрација што чека потврда', p_username;
+    END IF;
+    IF EXISTS (SELECT 1 FROM Pending_registrations WHERE phone = p_phone) THEN
+        RAISE EXCEPTION 'Телефонот % е во друга регистрација што чека потврда', p_phone;
+    END IF;
+
+    INSERT INTO Pending_registrations (name, username, phone, email, password_hash, token_hash, created_at, expires_at)
+    VALUES (p_name, p_username, p_phone, p_email, p_password_hash, p_token_hash, now(),
+            now() + make_interval(hours => p_valid_hours))
+    RETURNING pending_id INTO v_pending_id;
+    RETURN v_pending_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Нов линк за истата регистрација (стариот линк престанува да важи). Враќа pending_id или NULL
+-- ако нема барање што чека за таа е-пошта (апликацијата не открива дали постои).
+CREATE OR REPLACE FUNCTION fn_renew_pending_registration(
+    p_email VARCHAR,
+    p_token_hash VARCHAR,
+    p_valid_hours INT DEFAULT 24
+)
+    RETURNS INT AS $$
+DECLARE
+    v_pending_id INT;
+BEGIN
+    UPDATE Pending_registrations
+    SET token_hash = p_token_hash,
+        expires_at = now() + make_interval(hours => p_valid_hours)
+    WHERE lower(email) = lower(p_email)
+      AND expires_at >= now()
+    RETURNING pending_id INTO v_pending_id;
+    RETURN v_pending_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Корисникот го отворил линкот од мејлот: дури тогаш се креира профилот во Users (активен).
+-- Барањето се брише. Враќа user_id.
+CREATE OR REPLACE FUNCTION fn_confirm_registration(p_token_hash VARCHAR)
+    RETURNS INT AS $$
+DECLARE
+    v_pending Pending_registrations%ROWTYPE;
+    v_user_id INT;
+BEGIN
+    SELECT * INTO v_pending FROM Pending_registrations WHERE token_hash = p_token_hash FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Линкот не е важечки или профилот е веќе активиран. Обидете се да се најавите.';
+    END IF;
+    IF v_pending.expires_at < now() THEN
+        RAISE EXCEPTION 'Линкот истече. Регистрирајте се повторно.';
+    END IF;
+    -- во меѓувреме некој друг можел да ги земе податоците
+    IF EXISTS (SELECT 1 FROM Users WHERE username = v_pending.username
+                                      OR phone = v_pending.phone
+                                      OR lower(email) = lower(v_pending.email)) THEN
+        RAISE EXCEPTION 'Корисничкото име, телефонот или е-поштата веќе ги користи друг профил. Регистрирајте се повторно.';
+    END IF;
+
+    INSERT INTO Users (name, username, phone, email, password_hash, created_at, status_id)
+    VALUES (v_pending.name, v_pending.username, v_pending.phone, v_pending.email, v_pending.password_hash,
+            now(), fn_get_status_id('user', 'active'))
+    RETURNING User_id INTO v_user_id;
+
+    DELETE FROM Pending_registrations WHERE pending_id = v_pending.pending_id;
+    RETURN v_user_id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1748,7 +1966,9 @@ SELECT
     r.discount_percentage,
     -- Statusi
     sp.status_text                          AS payment_status,
-    sr.status_text                          AS ride_status
+    sr.status_text                          AS ride_status,
+    card.card_brand,
+    card.card_last4
 FROM Payments p
          JOIN Rides r            ON p.ride_id                    = r.ride_id
          JOIN Users u            ON r.user_id                    = u.user_id
@@ -1757,7 +1977,10 @@ FROM Payments p
          JOIN Status sp          ON p.status_id                  = sp.status_id
          JOIN Status sr          ON r.status_id                  = sr.status_id
          JOIN Locations lp       ON r.pickup_location_id         = lp.location_id
-         JOIN Locations ld       ON r.dropoff_location_id        = ld.location_id;
+         JOIN Locations ld       ON r.dropoff_location_id        = ld.location_id
+         LEFT JOIN LATERAL (SELECT ct.card_brand, ct.card_last4 FROM Card_transactions ct
+                            WHERE ct.payment_id = p.payment_id AND ct.approved
+                            ORDER BY ct.card_transaction_id DESC LIMIT 1) card ON true;
 
 -- Поправено: возилото се зема од тековната смена (Active_drivers),
 -- а не од сите возила на возачот -> нема дупли редови
@@ -1920,7 +2143,9 @@ SELECT
     r.discount_percentage,
     r.final_price,
     -- Status na voznata
-    s.status_text                           AS ride_status
+    s.status_text                           AS ride_status,
+    -- Izbran nacin na plakjanje (CASH / CARD)
+    pmr.payment_tip                         AS chosen_payment_method
 FROM Rides r
          LEFT JOIN Users u        ON r.user_id                = u.user_id
          LEFT JOIN Drivers d      ON r.driver_id              = d.driver_id
@@ -1929,7 +2154,8 @@ FROM Rides r
          JOIN Status s       ON r.status_id              = s.status_id
          LEFT JOIN vehicle_ownership vo ON r.vehicle_ownership_id = vo.vehicle_ownership_id
          LEFT JOIN vehicle_types vt ON vo.vehicle_type_id = vt.vehicle_type_id
-         LEFT JOIN vehicles_model vm ON vo.vehicles_model_id = vm.vehicles_model_id;
+         LEFT JOIN vehicles_model vm ON vo.vehicles_model_id = vm.vehicles_model_id
+         JOIN Payment_methods pmr ON r.payment_method_id = pmr.payment_method_id;
 
 -- Поправено: без ORDER BY
 CREATE OR REPLACE VIEW vw_drivers_near_center AS
@@ -1985,7 +2211,8 @@ SELECT
     lp.longitude                            AS pickup_lng,
     r.distance_km,
     ROUND(ST_Distance(lc.geom, lp.geom)::NUMERIC, 0) AS meters_to_pickup,
-    price.final_price                       AS estimated_price
+    price.final_price                       AS estimated_price,
+    pmr.payment_tip                         AS chosen_payment_method
 FROM Rides r
          JOIN Status s            ON r.status_id            = s.status_id
          JOIN Users u             ON r.user_id              = u.user_id
@@ -1994,6 +2221,7 @@ FROM Rides r
          JOIN Active_drivers ad   ON r.driver_id            = ad.driver_id
          JOIN Locations lc        ON ad.current_location_id = lc.location_id
          JOIN Vehicle_ownership vo ON ad.vehicle_ownership_id = vo.vehicle_ownership_id
+         JOIN Payment_methods pmr ON r.payment_method_id    = pmr.payment_method_id
          LEFT JOIN LATERAL fn_calculate_price(vo.vehicle_type_id, r.distance_km) price ON true
          LEFT JOIN LATERAL (SELECT ROUND(AVG(score), 2) AS avg_given_score
                             FROM Ratings WHERE User_id = r.user_id) u_rating ON true
@@ -2024,7 +2252,11 @@ SELECT
     c.cancelled_by_type,
     c.reason                                AS cancellation_reason,
     c.is_no_show,
-    c.cancellation_fee
+    c.cancellation_fee,
+    pmr.payment_tip                         AS chosen_payment_method,
+    card.card_brand,
+    card.card_last4,
+    pay.payment_id
 FROM Rides r
          JOIN Status s            ON r.status_id            = s.status_id
          JOIN Locations lp        ON r.pickup_location_id   = lp.location_id
@@ -2040,7 +2272,11 @@ FROM Rides r
          LEFT JOIN Ratings rt         ON rt.ride_id            = r.ride_id
          LEFT JOIN LATERAL (SELECT * FROM Cancellations cc
                             WHERE cc.ride_id = r.ride_id
-                            ORDER BY cc.cancellation_id DESC LIMIT 1) c ON true;
+                            ORDER BY cc.cancellation_id DESC LIMIT 1) c ON true
+         JOIN Payment_methods pmr     ON r.payment_method_id   = pmr.payment_method_id
+         LEFT JOIN LATERAL (SELECT ct.card_brand, ct.card_last4 FROM Card_transactions ct
+                            WHERE ct.payment_id = pay.payment_id AND ct.approved
+                            ORDER BY ct.card_transaction_id DESC LIMIT 1) card ON true;
 
 -- Заработка на возач по ден (за месец: GROUP BY ride_month во апликацијата)
 CREATE OR REPLACE VIEW vw_driver_earnings AS
@@ -2064,7 +2300,8 @@ FROM Rides r
 GROUP BY d.driver_id, d.name, r.end_time::DATE, date_trunc('month', r.end_time)::DATE;
 
 -- Вкупна заработка на возачот: возења + казни за откажување на неговите возења.
--- Возачот ја држи целата готовина, а на GEOCAB ѝ должи platform_commission.
+-- Готовина: парите се кај возачот, на GEOCAB ѝ должи провизија.
+-- Картичка: парите се кај GEOCAB, му должи на возачот driver_amount (пребивање во vw_driver_commission_balance).
 CREATE OR REPLACE VIEW vw_driver_earnings_summary AS
 SELECT
     d.driver_id,
@@ -2081,34 +2318,52 @@ SELECT
     COALESCE(SUM(p.driver_amount) FILTER (WHERE ps.status_text = 'completed'
                                            AND p.payment_time >= date_trunc('month', now())), 0) AS earnings_this_month,
     COALESCE(SUM(p.driver_amount) FILTER (WHERE ps.status_text = 'completed'
-                                           AND p.payment_time >= current_date), 0) AS earnings_today
+                                           AND p.payment_time >= current_date), 0) AS earnings_today,
+    COALESCE(SUM(p.amount) FILTER (WHERE ps.status_text = 'completed' AND pm.payment_tip = 'CASH'), 0) AS cash_collected,
+    COALESCE(SUM(p.amount) FILTER (WHERE ps.status_text = 'completed' AND pm.payment_tip = 'CARD'), 0) AS card_collected,
+    COALESCE(SUM(p.driver_amount) FILTER (WHERE ps.status_text = 'completed' AND pm.payment_tip = 'CARD'), 0) AS card_earnings
 FROM Drivers d
          LEFT JOIN Rides r     ON r.driver_id   = d.driver_id
          LEFT JOIN Status rs   ON r.status_id   = rs.status_id
          LEFT JOIN Payments p  ON p.ride_id     = r.ride_id
          LEFT JOIN Status ps   ON p.status_id   = ps.status_id
+         LEFT JOIN Payment_methods pm ON p.payment_method_id = pm.payment_method_id
 GROUP BY d.driver_id, d.name;
 
--- Колку провизија должи секој возач: провизија од платените плаќања - уплатено.
--- balance < 0 значи дека возачот уплатил повеќе (на пр. по враќање пари на корисник).
+-- Салдо меѓу возачот и GEOCAB со пребивање:
+--   + провизија од плаќања во готовина (возачот ги држи парите, должи провизија)
+--   - заработка на возачот од плаќања со картичка (парите ги држи GEOCAB)
+--   - уплати на возачот кон GEOCAB (Commission_payouts)
+--   + исплати од GEOCAB кон возачот (Driver_payouts)
+-- balance > 0: возачот должи на GEOCAB; balance < 0: GEOCAB должи на возачот.
 CREATE OR REPLACE VIEW vw_driver_commission_balance AS
 SELECT
     d.driver_id,
     d.name                                                  AS driver_name,
-    COALESCE(c.total_commission, 0)                         AS total_commission,
+    COALESCE(c.cash_commission, 0)                          AS total_commission,
     COALESCE(p.total_paid, 0)                               AS total_paid,
-    COALESCE(c.total_commission, 0) - COALESCE(p.total_paid, 0) AS balance,
-    p.last_payout_at
+    COALESCE(c.cash_commission, 0) - COALESCE(c.card_earnings, 0)
+        - COALESCE(p.total_paid, 0) + COALESCE(dp.total_paid_out, 0) AS balance,
+    p.last_payout_at,
+    COALESCE(c.card_earnings, 0)                            AS card_earnings,
+    COALESCE(dp.total_paid_out, 0)                          AS driver_payouts,
+    dp.last_driver_payout_at
 FROM Drivers d
-         LEFT JOIN (SELECT r.driver_id, SUM(pay.platform_amount) AS total_commission
+         LEFT JOIN (SELECT r.driver_id,
+                           SUM(pay.platform_amount) FILTER (WHERE pm.payment_tip = 'CASH') AS cash_commission,
+                           SUM(pay.driver_amount)   FILTER (WHERE pm.payment_tip = 'CARD') AS card_earnings
                     FROM Payments pay
-                             JOIN Rides r  ON r.ride_id    = pay.ride_id
-                             JOIN Status s ON s.status_id  = pay.status_id
+                             JOIN Rides r            ON r.ride_id            = pay.ride_id
+                             JOIN Status s           ON s.status_id          = pay.status_id
+                             JOIN Payment_methods pm ON pm.payment_method_id = pay.payment_method_id
                     WHERE s.status_text = 'completed'
                     GROUP BY r.driver_id) c ON c.driver_id = d.driver_id
          LEFT JOIN (SELECT driver_id, SUM(amount) AS total_paid, MAX(paid_at) AS last_payout_at
                     FROM Commission_payouts
-                    GROUP BY driver_id) p ON p.driver_id = d.driver_id;
+                    GROUP BY driver_id) p ON p.driver_id = d.driver_id
+         LEFT JOIN (SELECT driver_id, SUM(amount) AS total_paid_out, MAX(paid_at) AS last_driver_payout_at
+                    FROM Driver_payouts
+                    GROUP BY driver_id) dp ON dp.driver_id = d.driver_id;
 
 -- Оценки и коментари за возач
 CREATE OR REPLACE VIEW vw_driver_ratings AS
@@ -2160,11 +2415,13 @@ SELECT
     COALESCE(SUM(c.cancellation_fee), 0)                            AS cancellation_fees,
     ROUND(AVG(r.distance_km) FILTER (WHERE s.status_text = 'completed'), 2) AS avg_distance_km,
     ROUND(AVG(rt.score), 2)                                         AS avg_rating,
-    COALESCE(SUM(p.platform_amount) FILTER (WHERE ps.status_text = 'completed'), 0) AS platform_revenue
+    COALESCE(SUM(p.platform_amount) FILTER (WHERE ps.status_text = 'completed'), 0) AS platform_revenue,
+    COALESCE(SUM(p.amount) FILTER (WHERE ps.status_text = 'completed' AND pm.payment_tip = 'CARD'), 0) AS card_revenue
 FROM Rides r
          JOIN Status s          ON r.status_id = s.status_id
          LEFT JOIN Payments p   ON p.ride_id   = r.ride_id
          LEFT JOIN Status ps    ON p.status_id = ps.status_id
+         LEFT JOIN Payment_methods pm ON p.payment_method_id = pm.payment_method_id
          LEFT JOIN Ratings rt   ON rt.ride_id  = r.ride_id
          LEFT JOIN Cancellations c ON c.ride_id = r.ride_id
 GROUP BY r.request_time::DATE;

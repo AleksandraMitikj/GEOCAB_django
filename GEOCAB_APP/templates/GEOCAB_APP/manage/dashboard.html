@@ -69,9 +69,13 @@
             <h2 class="h6 mb-3">Пари (овој месец)</h2>
             <table class="table table-sm mb-2">
                 <tr><td>Наплатено од корисници</td><td class="text-end fw-semibold">{{ money.collected }} ден.</td></tr>
+                <tr><td class="small ps-3">од тоа со картичка (кај GEOCAB)</td><td class="text-end small">{{ money.card }} ден.</td></tr>
                 <tr><td>Дел на возачите</td><td class="text-end">{{ money.drivers }} ден.</td></tr>
                 <tr class="table-success"><td>Провизија за GEOCAB</td><td class="text-end fw-semibold">{{ money.platform }} ден.</td></tr>
                 <tr><td class="small text-secondary">Денес: приход GEOCAB</td><td class="text-end small text-secondary">{{ today.platform_revenue }} ден.</td></tr>
+                {% if owed_to_drivers %}
+                    <tr class="table-info"><td class="small">GEOCAB должи на возачи (картички, за исплата)</td><td class="text-end small fw-semibold">{{ owed_to_drivers }} ден.</td></tr>
+                {% endif %}
             </table>
         </div></div>
     </div>

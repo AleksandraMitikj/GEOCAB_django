@@ -87,6 +87,24 @@
                         <p class="small text-secondary mt-2 mb-0">Цената е проценка. Конечната се пресметува на крајот на возењето.</p>
                     </div>
                 </div>
+
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body">
+                        <h2 class="h6">Како ќе платите?</h2>
+                        <div class="btn-group w-100" role="group" aria-label="Начин на плаќање">
+                            <input type="radio" class="btn-check" name="payment_method" id="pay-cash" value="CASH"
+                                   {% if selected_payment != 'CARD' %}checked{% endif %}>
+                            <label class="btn btn-outline-dark" for="pay-cash">💵 Готовина</label>
+                            <input type="radio" class="btn-check" name="payment_method" id="pay-card" value="CARD"
+                                   {% if selected_payment == 'CARD' %}checked{% endif %}>
+                            <label class="btn btn-outline-dark" for="pay-card">💳 Картичка</label>
+                        </div>
+                        <p class="small text-secondary mt-2 mb-0">
+                            Цената е иста. Со готовина плаќате на возачот; со картичка плаќате во апликацијата
+                            на крајот на возењето.
+                        </p>
+                    </div>
+                </div>
             {% endif %}
 
             <div class="d-grid gap-2">

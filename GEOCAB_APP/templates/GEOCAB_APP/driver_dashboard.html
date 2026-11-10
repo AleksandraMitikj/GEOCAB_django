@@ -20,10 +20,19 @@
 {% include 'GEOCAB_APP/partials/debt_banner.html' %}
 
 {% if collect %}
-    {# ---------- Наплата во готовина за завршено возење ---------- #}
-    <div class="card border-0 shadow mb-3 border-start border-4 border-success">
+    {# ---------- Наплата за завршено возење: готовина, или чекање плаќање со картичка ---------- #}
+    <div class="card border-0 shadow mb-3 border-start border-4 {% if collect.by_card %}border-primary{% else %}border-success{% endif %}">
         <div class="card-body">
-            <h2 class="h5">💵 Наплатете во готовина</h2>
+            {% if collect.by_card %}
+                <h2 class="h5">💳 Корисникот плаќа со картичка</h2>
+                {% if collect.card_failed %}
+                    <div class="alert alert-warning small py-2">Картичката не помина. Корисникот може да проба повторно или да ви плати во готовина.</div>
+                {% else %}
+                    <p class="small text-secondary mb-2"><span class="spinner-border spinner-border-sm"></span> Се чека плаќањето во апликацијата...</p>
+                {% endif %}
+            {% else %}
+                <h2 class="h5">💵 Наплатете во готовина</h2>
+            {% endif %}
             <p class="mb-2">Возење #{{ collect.ride.ride_id }} · {{ collect.ride.user.name }}</p>
             <ul class="list-unstyled small mb-2">
                 <li>Возење: {{ collect.ride_amount }} ден.</li>
@@ -36,7 +45,8 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="cash_received">
                 <input type="hidden" name="ride_id" value="{{ collect.ride.ride_id }}">
-                <button type="submit" class="btn btn-success btn-lg w-100">Примив готовина</button>
+                <button type="submit" class="btn {% if collect.by_card %}btn-outline-success{% else %}btn-success btn-lg{% endif %} w-100">
+                    {% if collect.by_card %}Корисникот плати во готовина{% else %}Примив готовина{% endif %}</button>
             </form>
         </div>
     </div>
@@ -107,7 +117,7 @@
                     <li class="mb-1">👤 <strong>{{ ride.user_name }}</strong> · {{ ride.user_phone }}</li>
                     <li class="mb-1">🟢 {{ ride.pickup_ulica }} {{ ride.pickup_broj }}, {{ ride.pickup_naselba }}</li>
                     <li class="mb-1">🔴 {{ ride.dropoff_ulica }} {{ ride.dropoff_broj }}, {{ ride.dropoff_naselba }}</li>
-                    <li>📏 {{ ride.distance_km }} km</li>
+                    <li>📏 {{ ride.distance_km }} km · {{ ride.chosen_payment_method|pay_method }}</li>
                 </ul>
                 {% if ride.ride_status == 'in_progress' %}
                     {% include 'GEOCAB_APP/partials/route_map.html' with pickup_lat=ride.pickup_lat pickup_lng=ride.pickup_lng dropoff_lat=ride.dropoff_lat dropoff_lng=ride.dropoff_lng target='dropoff' show_nav=True %}
@@ -158,7 +168,7 @@
                     <li class="mb-1">👤 {{ offer.user_name }}{% if offer.user_avg_given_score %} · дава просечно ⭐ {{ offer.user_avg_given_score }}{% endif %}</li>
                     <li class="mb-1">🟢 {{ offer.pickup_address }} <span class="text-secondary small">({{ offer.meters_to_pickup|floatformat:0 }} m од вас)</span></li>
                     <li class="mb-1">🔴 {{ offer.dropoff_address }}</li>
-                    <li>📏 {{ offer.distance_km }} km · 💰 <strong>{{ offer.estimated_price }} ден.</strong></li>
+                    <li>📏 {{ offer.distance_km }} km · 💰 <strong>{{ offer.estimated_price }} ден.</strong> · {{ offer.chosen_payment_method|pay_method }}</li>
                 </ul>
                 {% include 'GEOCAB_APP/partials/route_map.html' with pickup_lat=offer.pickup_lat pickup_lng=offer.pickup_lng dropoff_lat=offer_dropoff.latitude dropoff_lng=offer_dropoff.longitude target='pickup' show_nav=False %}
                 <div class="d-flex gap-2">

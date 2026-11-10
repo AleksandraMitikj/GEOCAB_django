@@ -274,6 +274,8 @@ class Rides(models.Model):
     distance_km = models.DecimalField(max_digits=6, decimal_places=2)
     final_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, db_default=0)
+    # начинот што корисникот го избрал при барањето (CASH / CARD); fn_request_ride го поставува
+    payment_method = models.ForeignKey(PaymentMethods, models.DO_NOTHING)
 
     class Meta:
         managed = False
@@ -379,3 +381,58 @@ class RideReports(models.Model):
 
     def __str__(self):
         return f'Пријава {self.report_id} (возење {self.ride_id})'
+
+
+class DriverPayouts(models.Model):
+    """Исплата од GEOCAB кон возачот (заработка од плаќања со картичка, по пребивањето)."""
+    payout_id = models.AutoField(primary_key=True)
+    driver = models.ForeignKey(Drivers, models.DO_NOTHING)
+    admin = models.ForeignKey(Admins, models.DO_NOTHING)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_at = models.DateTimeField(db_default=Now())
+    note = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'driver_payouts'
+
+    def __str__(self):
+        return f'{self.driver}: {self.amount} ден.'
+
+
+class CardTransactions(models.Model):
+    """Обид за плаќање со картичка. Се чуваат само типот и последните 4 цифри - никогаш целиот број."""
+    card_transaction_id = models.AutoField(primary_key=True)
+    payment = models.ForeignKey(Payments, models.DB_CASCADE)
+    card_brand = models.CharField(max_length=20)
+    card_last4 = models.CharField(max_length=4)
+    approved = models.BooleanField()
+    created_at = models.DateTimeField(db_default=Now())
+
+    class Meta:
+        managed = False
+        db_table = 'card_transactions'
+
+    def __str__(self):
+        return f'{self.card_brand} •••• {self.card_last4} ({"одобрено" if self.approved else "одбиено"})'
+
+
+class PendingRegistrations(models.Model):
+    """Регистрација што чека потврда на е-пошта (fn_create_pending_registration / fn_confirm_registration).
+    Профилот во Users се креира дури по потврдата. Се чува само hash од токенот и од лозинката."""
+    pending_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    username = models.CharField(max_length=255)
+    phone = models.CharField(max_length=255)
+    email = models.CharField(unique=True, max_length=255)
+    password_hash = models.TextField()
+    token_hash = models.CharField(unique=True, max_length=64)
+    created_at = models.DateTimeField(db_default=Now())
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'pending_registrations'
+
+    def __str__(self):
+        return f'{self.username} ({self.email}) - чека потврда'

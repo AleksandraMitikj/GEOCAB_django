@@ -1,0 +1,22 @@
+{% extends 'GEOCAB_APP/account/_card.html' %}
+{% block title %}Проверете ја е-поштата - GEOCAB{% endblock %}
+{% block card %}
+<div class="text-center">
+    <div class="display-5 mb-2">📧</div>
+    <h1 class="h4 mb-2">Проверете ја е-поштата</h1>
+    <p class="mb-1">Ви испративме мејл на <strong>{{ email }}</strong>.</p>
+    <p class="small text-secondary mb-4">
+        Отворете го и кликнете <strong>„Потврди е-пошта“</strong>. Профилот се креира дури тогаш.
+        Линкот важи {{ hours }} часа.
+    </p>
+</div>
+<div class="border rounded-3 p-3 bg-light small mb-3">
+    Не стигна мејлот? Проверете во Spam, или испратете нов линк:
+    <form method="post" action="{% url 'register_resend' %}" class="mt-2">
+        {% csrf_token %}
+        <input type="hidden" name="email" value="{{ email }}">
+        <button type="submit" class="btn btn-outline-dark btn-sm w-100">Испрати повторно</button>
+    </form>
+</div>
+<p class="text-center small mb-0">Погрешна е-пошта? <a href="{% url 'register' %}">Регистрирајте се повторно</a></p>
+{% endblock %}

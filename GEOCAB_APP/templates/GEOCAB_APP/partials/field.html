@@ -12,6 +12,9 @@
                {% if field.value and field.field.widget.input_type != 'password' %}value="{{ field.value }}"{% endif %}
                {% if field.field.widget.attrs.placeholder %}placeholder="{{ field.field.widget.attrs.placeholder }}"{% endif %}
                {% if field.field.widget.attrs.list %}list="{{ field.field.widget.attrs.list }}" autocomplete="off"{% endif %}
+               {% if field.field.widget.attrs.autocomplete %}autocomplete="{{ field.field.widget.attrs.autocomplete }}"{% endif %}
+               {% if field.field.widget.attrs.inputmode %}inputmode="{{ field.field.widget.attrs.inputmode }}"{% endif %}
+               {% if field.field.max_length %}maxlength="{{ field.field.max_length }}"{% endif %}
                {% if field.field.required %}required{% endif %}>
     {% endif %}
     {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}

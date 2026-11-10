@@ -8,12 +8,13 @@ from django.db.models import Avg
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
 
-from . import db
+from . import card_gateway, db
 from .auth import ROLES, current_person, login_person, logout_person, role_required
-from .forms import DriverLocationForm, LoginForm, RegisterForm, RideForm
-from .models import (ActiveDrivers, CommissionPayouts, Drivers, Notifications, Payments, PlatformSettings, PricingRules,
+from .forms import CardPaymentForm, DriverLocationForm, LoginForm, RideForm
+from .models import (ActiveDrivers, CardTransactions, CommissionPayouts, DriverPayouts, Drivers, Notifications, Payments, PlatformSettings, PricingRules,
                      Ratings, Rides, Users, VehicleOwnership)
 
 
@@ -46,18 +47,6 @@ def about(request):
     return render(request, 'GEOCAB_APP/about.html', _public_context())
 
 
-def register(request):
-    if current_person(request)[1]:
-        return redirect('home')
-    form = RegisterForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        user = form.save()
-        login_person(request, 'user', user)
-        messages.success(request, f'Добредојдовте, {user.name}! Профилот е креиран.')
-        return redirect('home')
-    return render(request, 'GEOCAB_APP/register.html', {'form': form})
-
-
 def login_view(request):
     if current_person(request)[1]:
         return redirect('home')
@@ -86,13 +75,13 @@ def logout_view(request):
     return redirect('home')
 
 
-# ---- Плаќање (само готовина) ---------------------------------------------------
+# ---- Плаќање (готовина или картичка) ----------------------------------------------
 
 def _unpaid(user_id):
     """Неплатени плаќања на корисникот: завршени возења и казни за откажување.
-    Казните се наплаќаат во готовина заедно со следното завршено возење."""
+    Се плаќаат сите заедно: во готовина кај возачот на следното возење или со картичка (pay_card)."""
     return list(Payments.objects.filter(ride__user_id=user_id, status__status_text__in=('pending', 'failed'))
-                .select_related('ride__status').order_by('payment_id'))
+                .select_related('ride__status', 'status').order_by('payment_id'))
 
 
 def _driver_to_collect(driver_id):
@@ -100,7 +89,7 @@ def _driver_to_collect(driver_id):
     износи на тој корисник (возењето + евентуални стари казни)."""
     ride = (Rides.objects.filter(driver_id=driver_id, status__status_text='completed',
                                  payments__status__status_text__in=('pending', 'failed'))
-            .select_related('user').order_by('-ride_id').first())
+            .select_related('user', 'payment_method').order_by('-ride_id').first())
     if not ride:
         return None
     unpaid = _unpaid(ride.user_id)
@@ -108,7 +97,46 @@ def _driver_to_collect(driver_id):
     return {'ride': ride, 'payments': unpaid, 'fees': fees,
             'ride_amount': sum(p.amount for p in unpaid if p.ride_id == ride.pk),
             'fees_amount': sum(p.amount for p in fees),
-            'total': sum(p.amount for p in unpaid)}
+            'total': sum(p.amount for p in unpaid),
+            # корисникот избрал картичка: возачот чека плаќање од апликацијата (готовината е резерва)
+            'by_card': ride.payment_method.payment_tip == 'CARD',
+            'card_failed': any(p.status.status_text == 'failed' for p in unpaid)}
+
+
+@sensitive_post_parameters('card_name', 'card_number', 'card_expiry', 'card_cvv')
+@role_required('user')
+def pay_card(request):
+    """Плаќање со картичка на сите неплатени износи (возење + стари казни) преку платежната порта.
+    Бројот на картичката оди само до card_gateway.charge; во базата се запишуваат тип и последни 4 цифри."""
+    unpaid = _unpaid(request.person.pk)
+    if not unpaid:
+        messages.info(request, 'Немате ништо за плаќање.')
+        return redirect('ride_current')
+    total = sum(p.amount for p in unpaid)
+    form = CardPaymentForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        result = card_gateway.charge(form.cleaned_data['card_number'], total)
+        try:
+            with transaction.atomic():
+                for ride_id in dict.fromkeys(p.ride_id for p in unpaid):
+                    db.process_payment(ride_id, 'CARD', result.approved, result.brand, result.last4)
+        except DatabaseError as exc:
+            # на пр. возачот во меѓувреме потврдил готовина - нема што да се плати
+            messages.error(request, db.error_message(exc))
+            return redirect('ride_current')
+        if result.approved:
+            messages.success(request, result.message)
+            return redirect('ride_current')
+        messages.error(request, f'{result.message} Обидете се со друга картичка или платете во готовина на возачот.')
+        unpaid = _unpaid(request.person.pk)
+        form = CardPaymentForm()
+    elif form.is_bound:
+        # бројот на картичката не се враќа назад на страницата
+        form.data = form.data.copy()
+        form.data.pop('card_number', None)
+    return render(request, 'GEOCAB_APP/pay_card.html', {
+        'form': form, 'unpaid': unpaid, 'total': total, 'demo': card_gateway.DEMO,
+    })
 
 
 # ---- Корисник: возење ---------------------------------------------------------
@@ -145,7 +173,8 @@ def ride_new(request):
                     pickup = db.create_location(*form.location_args('pickup'))
                     dropoff = db.create_location(*form.location_args('dropoff'))
                     ride_id = db.request_ride(request.person.pk, pickup, dropoff,
-                                              form.cleaned_data['vehicle_class'] or None, form.road_distance_km())
+                                              form.cleaned_data['vehicle_class'] or None, form.road_distance_km(),
+                                              form.cleaned_data['payment_method'])
                 ride = Rides.objects.select_related('status').get(pk=ride_id)
                 if ride.status.status_text != 'no_driver':
                     messages.success(request, 'Барањето е испратено.')
@@ -158,6 +187,7 @@ def ride_new(request):
             messages.error(request, db.error_message(exc))
     return render(request, 'GEOCAB_APP/ride_new.html', {
         'form': form, 'estimates': estimates, 'selected_class': form.data.get('vehicle_class', ''),
+        'selected_payment': form.data.get('payment_method') or 'CASH',
         'by_road': bool(estimates) and form.road_distance_km() is not None,
     })
 
@@ -192,7 +222,11 @@ def ride_current(request):
         if last:
             context['last_label'] = STATUS_LABELS.get(last.status.status_text)
         if last and last.status.status_text == 'completed':
-            context['last_payment'] = last.payments_set.select_related('status').order_by('-payment_id').first()
+            payment = last.payments_set.select_related('status', 'payment_method').order_by('-payment_id').first()
+            context['last_payment'] = payment
+            if payment:
+                context['last_card'] = (CardTransactions.objects.filter(payment=payment, approved=True)
+                                        .order_by('-card_transaction_id').first())
             context['can_rate'] = not Ratings.objects.filter(ride=last).exists()
     context['unpaid_fees'] = [p for p in _unpaid(request.person.pk) if p.ride.status.status_text == 'cancelled']
     context['unpaid_fees_total'] = sum(p.amount for p in context['unpaid_fees'])
@@ -333,16 +367,19 @@ def driver_profile(request):
     summary = db.fetch_view('vw_driver_earnings_summary', 'driver_id = %s', [driver_id])[0]
     daily = db.fetch_view('vw_driver_earnings', 'driver_id = %s ORDER BY ride_date DESC LIMIT 14', [driver_id])
     payments = (Payments.objects.filter(ride__driver_id=driver_id, status__status_text='completed')
-                .select_related('ride__status', 'ride__user').order_by('-payment_time')[:15])
+                .select_related('ride__status', 'ride__user', 'payment_method').order_by('-payment_time')[:15])
     settings_row = PlatformSettings.objects.filter(pk=1).first()
     commission = settings_row.commission_percentage if settings_row else 0
+    balance = db.fetch_view('vw_driver_commission_balance', 'driver_id = %s', [driver_id])[0]
     return render(request, 'GEOCAB_APP/driver_profile.html', {
         'summary': summary, 'daily': daily, 'payments': payments,
         'vehicles': _driver_vehicles(driver_id),
         'commission': commission, 'driver_share': 100 - commission,
-        'balance': db.fetch_view('vw_driver_commission_balance', 'driver_id = %s', [driver_id])[0],
+        'balance': balance,
+        'owed_to_driver': max(-balance['balance'], 0),   # GEOCAB должи на возачот (по пребивањето)
         'debt': db.driver_debt_status(driver_id),
         'payouts': CommissionPayouts.objects.filter(driver_id=driver_id).order_by('-payout_id')[:10],
+        'driver_payouts': DriverPayouts.objects.filter(driver_id=driver_id).order_by('-payout_id')[:10],
     })
 
 

@@ -18,7 +18,7 @@ from .auth import role_required, set_password
 from .forms import PROFILE_LABELS as PROFILE_LABEL
 from .forms import (AdminSetPasswordForm, CommissionForm, profile_form, NewDriverForm, NewVehicleClassForm, PayoutForm, PriceForm,
                     VehicleChoiceForm, VehicleForm)
-from .models import (ActiveDrivers, Cancellations, CommissionPayouts, Drivers, DriversVehicleOwnership, Notifications,
+from .models import (ActiveDrivers, Cancellations, CardTransactions, CommissionPayouts, DriverPayouts, Drivers, DriversVehicleOwnership, Notifications,
                      Payments, PlatformSettings, PricingRules, Ratings, RideRejections, Rides, Status, Users,
                      VehicleOwnership, VehicleTypes)
 
@@ -38,7 +38,8 @@ def dashboard(request):
     month_start = today.replace(day=1)
     days = db.fetch_view('vw_admin_dashboard', 'day >= %s', [month_start])
     money = (Payments.objects.filter(status__status_text='completed', payment_time__date__gte=month_start)
-             .aggregate(collected=Sum('amount'), platform=Sum('platform_amount'), drivers=Sum('driver_amount')))
+             .aggregate(collected=Sum('amount'), platform=Sum('platform_amount'), drivers=Sum('driver_amount'),
+                        card=Sum('amount', filter=Q(payment_method__payment_tip='CARD'))))
     balances = db.fetch_view('vw_driver_commission_balance', 'balance > 0 ORDER BY balance DESC')
     for b in balances:
         b['debt'] = db.driver_debt_status(b['driver_id'])['level']
@@ -51,6 +52,8 @@ def dashboard(request):
         'available': shifts.filter(is_available=True).count(),
         'active_rides': len(db.fetch_view('vw_current_ride')),
         'outstanding': sum(b['balance'] for b in balances),
+        # заработка од картички што GEOCAB уште не им ја исплатила на возачите (по пребивањето)
+        'owed_to_drivers': -sum(b['balance'] for b in db.fetch_view('vw_driver_commission_balance', 'balance < 0')),
         'debtors': balances[:5],
         'blocked_for_debt': sum(1 for b in balances if b['debt'] == 'blocked'),
         'warned_for_debt': sum(1 for b in balances if b['debt'] == 'warning'),
@@ -126,9 +129,11 @@ def driver_detail(request, driver_id):
         'shift': shift,
         'summary': db.fetch_view('vw_driver_earnings_summary', 'driver_id = %s', [driver.pk])[0],
         'balance': balance,
+        'owed_to_driver': max(-balance['balance'], 0),   # GEOCAB должи на возачот (картички)
         'debt': db.driver_debt_status(driver.pk),
         'vehicles': VehicleOwnership.objects.filter(driversvehicleownership__driver=driver).select_related('vehicle_type', 'vehicles_model'),
         'payouts': CommissionPayouts.objects.filter(driver=driver).select_related('admin').order_by('-payout_id'),
+        'driver_payouts': DriverPayouts.objects.filter(driver=driver).select_related('admin').order_by('-payout_id'),
         'payout_form': PayoutForm(initial={'amount': balance['balance'] if balance['balance'] > 0 else None}),
         'vehicle_choice': VehicleChoiceForm(allow_none=False),
         'vehicle_form': VehicleForm(prefix='v'),
@@ -150,6 +155,14 @@ def driver_action(request, driver_id):
                     db.record_commission_payout(driver.pk, request.person.pk, form.cleaned_data['amount'],
                                                 form.cleaned_data['note'] or None)
                     messages.success(request, f'Евидентирана уплата од {form.cleaned_data["amount"]} ден.')
+            elif action == 'driver_payout':
+                form = PayoutForm(request.POST)
+                if not form.is_valid():
+                    messages.error(request, 'Внесете валиден износ.')
+                else:
+                    db.record_driver_payout(driver.pk, request.person.pk, form.cleaned_data['amount'],
+                                            form.cleaned_data['note'] or None)
+                    messages.success(request, f'Евидентирана исплата од {form.cleaned_data["amount"]} ден. на {driver.name}.')
             elif action == 'block':
                 if ActiveDrivers.objects.filter(driver=driver, working_end__isnull=True).exists():
                     db.driver_end_shift(driver.pk)  # не успева ако возачот има активно возење
@@ -257,6 +270,7 @@ def ride_detail(request, ride_id):
         'is_active': ride['ride_status'] in ACTIVE_STATUSES,
         'timeline': timeline,
         'payments': Payments.objects.filter(ride_id=ride_id).select_related('status', 'payment_method').order_by('payment_id'),
+        'card_attempts': CardTransactions.objects.filter(payment__ride_id=ride_id).order_by('card_transaction_id'),
         'cancellation': Cancellations.objects.filter(ride_id=ride_id).order_by('-cancellation_id').first(),
         'rejections': RideRejections.objects.filter(ride_id=ride_id).select_related('driver').order_by('rejected_at'),
         'rating': Ratings.objects.filter(ride_id=ride_id).first(),
@@ -280,9 +294,11 @@ def ride_action(request, ride_id):
                     db.cancel_ride(ride_id, 'ADMIN', request.person.pk, reason[:255])
                     messages.success(request, f'Возењето #{ride_id} е откажано. Корисникот е известен.')
             elif action == 'refund':
-                payment = get_object_or_404(Payments, pk=request.POST.get('payment_id'), ride_id=ride_id)
+                payment = get_object_or_404(Payments.objects.select_related('payment_method'),
+                                            pk=request.POST.get('payment_id'), ride_id=ride_id)
                 db.refund_payment(payment.pk, request.person.pk)
-                messages.success(request, f'Вратени се {payment.amount} ден. на корисникот.')
+                to_card = ' на картичката' if payment.payment_method.payment_tip == 'CARD' else ''
+                messages.success(request, f'Вратени се {payment.amount} ден. на корисникот{to_card}.')
             else:
                 messages.error(request, 'Непозната акција.')
     except DatabaseError as exc:

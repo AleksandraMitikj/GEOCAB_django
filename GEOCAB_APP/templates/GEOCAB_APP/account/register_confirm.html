@@ -1,0 +1,17 @@
+{% extends 'GEOCAB_APP/account/_card.html' %}
+{% block title %}Потврда на е-пошта - GEOCAB{% endblock %}
+{% block card %}
+<div class="text-center">
+    <div class="display-5 mb-2">✅</div>
+    <h1 class="h4 mb-2">Потврдете ја е-поштата</h1>
+    <p class="mb-1">Здраво <strong>{{ pending.name }}</strong>!</p>
+    <p class="small text-secondary mb-4">
+        Кликнете за да ја потврдите е-поштата <strong>{{ pending.email }}</strong> и да се креира профилот
+        <strong>{{ pending.username }}</strong>.
+    </p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-gc btn-lg w-100">Потврди е-пошта</button>
+    </form>
+</div>
+{% endblock %}

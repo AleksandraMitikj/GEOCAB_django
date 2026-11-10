@@ -60,17 +60,17 @@
 
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm mb-3"><div class="card-body">
-            <h2 class="h6 mb-3">Плаќања</h2>
+            <h2 class="h6 mb-3">Плаќања <span class="fw-normal text-secondary small">· избрано: {{ ride.chosen_payment_method|pay_method }}</span></h2>
             {% for p in payments %}
                 <div class="border rounded p-2 mb-2 small">
                     <div class="d-flex justify-content-between">
                         <strong>{{ p.amount }} ден.</strong>
                         <span class="badge {% if p.status.status_text == 'completed' %}text-bg-success{% elif p.status.status_text == 'refunded' %}text-bg-info{% else %}text-bg-warning{% endif %}">{{ p.status.status_text }}</span>
                     </div>
-                    <div class="text-secondary">{{ p.payment_method.payment_tip }} · {{ p.payment_time|date:"d.m.Y H:i" }} · возач {{ p.driver_amount }} / GEOCAB {{ p.platform_amount }} ({{ p.commission_percentage|floatformat:0 }}%)</div>
+                    <div class="text-secondary">{{ p.payment_method.payment_tip|pay_method }} · {{ p.payment_time|date:"d.m.Y H:i" }} · возач {{ p.driver_amount }} / GEOCAB {{ p.platform_amount }} ({{ p.commission_percentage|floatformat:0 }}%)</div>
                     {% if p.status.status_text == 'completed' %}
                         <form method="post" action="{% url 'manage_ride_action' ride.ride_id %}" class="mt-2"
-                              onsubmit="return confirm('Да му се вратат {{ p.amount }} ден. на корисникот?');">
+                              onsubmit="return confirm('Да му се вратат {{ p.amount }} ден. на корисникот{% if p.payment_method.payment_tip == 'CARD' %} на картичката{% endif %}?');">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="refund">
                             <input type="hidden" name="payment_id" value="{{ p.payment_id }}">
@@ -81,6 +81,15 @@
             {% empty %}
                 <p class="text-secondary small mb-0">Нема плаќања.</p>
             {% endfor %}
+            {% if card_attempts %}
+                <div class="small fw-semibold mt-3 mb-1">Обиди со картичка</div>
+                <ul class="list-unstyled small mb-0">
+                    {% for c in card_attempts %}
+                        <li>{{ c.created_at|date:"d.m.Y H:i:s" }} · {{ c.card_brand|card_brand }} •••• {{ c.card_last4 }} ·
+                            {% if c.approved %}<span class="text-success">одобрено</span>{% else %}<span class="text-danger">одбиено</span>{% endif %}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
         </div></div>
 
         {% if is_active %}

@@ -13,7 +13,8 @@
         {% if unpaid_fees %}
             <div class="alert alert-warning small">
                 Имате неплатена казна за откажување: <strong>{{ unpaid_fees_total }} ден.</strong>
-                Ќе ја платите во готовина на возачот, заедно со следното возење.
+                Платете ја сега со картичка или во готовина на возачот, заедно со следното возење.
+                {% if not ride %}<a href="{% url 'pay_card' %}" class="alert-link d-block mt-1">💳 Плати со картичка</a>{% endif %}
             </div>
         {% endif %}
 
@@ -99,10 +100,23 @@
                     </p>
                     <div class="display-6 fw-bold">{{ last_payment.amount }} ден.</div>
                     {% if last_payment.status.status_text == 'completed' %}
-                        <span class="badge text-bg-success mt-2">✓ Платено во готовина</span>
+                        {% if last_card %}
+                            <span class="badge text-bg-success mt-2">✓ Платено со картичка {{ last_card.card_brand|card_brand }} •••• {{ last_card.card_last4 }}</span>
+                        {% else %}
+                            <span class="badge text-bg-success mt-2">✓ Платено во готовина</span>
+                        {% endif %}
+                    {% elif last_payment.status.status_text == 'refunded' %}
+                        <span class="badge text-bg-secondary mt-2">Парите се вратени</span>
+                    {% elif last_payment.payment_method.payment_tip == 'CARD' %}
+                        {% if last_payment.status.status_text == 'failed' %}
+                            <p class="mt-2 mb-2 text-danger">Плаќањето со картичка не успеа.</p>
+                        {% endif %}
+                        <a href="{% url 'pay_card' %}" class="btn btn-dark btn-lg mt-2">💳 Плати со картичка</a>
+                        <p class="small text-secondary mt-2 mb-0">или платете во готовина на возачот</p>
                     {% else %}
                         <p class="mt-2 mb-0">💵 Платете во готовина на возачот.</p>
-                        <p class="small text-secondary">Чекаме возачот да го потврди плаќањето...</p>
+                        <p class="small text-secondary">Чекаме возачот да го потврди плаќањето...
+                            или <a href="{% url 'pay_card' %}">платете со картичка</a>.</p>
                     {% endif %}
                 </div>
             </div>

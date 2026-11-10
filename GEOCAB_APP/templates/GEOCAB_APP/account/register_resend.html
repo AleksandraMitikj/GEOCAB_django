@@ -1,0 +1,12 @@
+{% extends 'GEOCAB_APP/account/_card.html' %}
+{% block title %}Нов линк за потврда - GEOCAB{% endblock %}
+{% block card %}
+<h1 class="h4 mb-2">Нов линк за потврда</h1>
+<p class="small text-secondary mb-4">Внесете ја е-поштата со која се регистриравте и ќе ви испратиме нов линк за активирање на профилот.</p>
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% include 'GEOCAB_APP/partials/field.html' with field=form.email %}
+    <button type="submit" class="btn btn-dark w-100">Испрати нов линк</button>
+</form>
+<p class="text-center small mt-3 mb-0"><a href="{% url 'login' %}">← Назад на најава</a></p>
+{% endblock %}

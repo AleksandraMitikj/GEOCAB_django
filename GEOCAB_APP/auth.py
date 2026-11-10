@@ -4,6 +4,8 @@
 Не се користи Django auth_user (тој е само за /admin/). Во session се чува:
     request.session['geocab'] = {'role': 'user'|'driver'|'admin', 'id': ..., 'name': ...}
 """
+import hashlib
+import secrets
 from functools import wraps
 
 from django.contrib import messages
@@ -65,6 +67,19 @@ def role_required(*roles):
             return view(request, *args, **kwargs)
         return wrapper
     return decorator
+
+
+# ---- Потврда на е-пошта при регистрација ------------------------------------------
+
+def confirmation_token_hash(token):
+    """Во базата се чува само SHA-256 од токенот, не самиот токен од линкот."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def new_confirmation_token():
+    """(токен за линкот во мејлот, hash за базата)"""
+    token = secrets.token_urlsafe(32)
+    return token, confirmation_token_hash(token)
 
 
 # ---- Лозинки -------------------------------------------------------------------
